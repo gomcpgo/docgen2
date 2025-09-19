@@ -17,17 +17,26 @@ import (
 func main() {
 	// Terminal mode flags
 	var (
-		createDoc    string
-		withChapters bool
-		listDocs     bool
-		overview     string
-		addHeading   string
-		headingLevel int
-		headingText  string
-		addMarkdown  string
+		createDoc       string
+		withChapters    bool
+		listDocs        bool
+		overview        string
+		addHeading      string
+		headingLevel    int
+		headingText     string
+		addMarkdown     string
 		markdownContent string
-		exportDoc    string
-		exportFormat string
+		exportDoc       string
+		exportFormat    string
+		
+		// New block operations
+		updateBlock     string
+		deleteBlock     string
+		moveBlock       string
+		getBlock        string
+		blockID         string
+		newPosition     string
+		newContent      string
 	)
 	
 	flag.StringVar(&createDoc, "create", "", "Create a new document with the given title")
@@ -41,6 +50,15 @@ func main() {
 	flag.StringVar(&markdownContent, "content", "", "Markdown content")
 	flag.StringVar(&exportDoc, "export", "", "Export document (specify doc ID)")
 	flag.StringVar(&exportFormat, "format", "html", "Export format (pdf, docx, html)")
+	
+	// New block operation flags
+	flag.StringVar(&updateBlock, "update-block", "", "Update block in document (specify doc ID)")
+	flag.StringVar(&deleteBlock, "delete-block", "", "Delete block from document (specify doc ID)")
+	flag.StringVar(&moveBlock, "move-block", "", "Move block in document (specify doc ID)")
+	flag.StringVar(&getBlock, "get-block", "", "Get block from document (specify doc ID)")
+	flag.StringVar(&blockID, "block-id", "", "Block ID for block operations")
+	flag.StringVar(&newPosition, "new-position", "", "New position for move operation (start, end, after:block-id)")
+	flag.StringVar(&newContent, "new-content", "", "New content for update operation (JSON format)")
 	
 	flag.Parse()
 	
@@ -102,6 +120,65 @@ func main() {
 		runTerminalCommand(ctx, h, "export_document", map[string]interface{}{
 			"document_id": exportDoc,
 			"format":      exportFormat,
+		})
+		return
+	}
+	
+	if updateBlock != "" {
+		if blockID == "" {
+			log.Fatal("Block ID is required for update operation (use -block-id flag)")
+		}
+		if newContent == "" {
+			log.Fatal("New content is required for update operation (use -new-content flag)")
+		}
+		
+		// Parse JSON content
+		var contentData map[string]interface{}
+		if err := json.Unmarshal([]byte(newContent), &contentData); err != nil {
+			log.Fatalf("Invalid JSON in new-content: %v", err)
+		}
+		
+		runTerminalCommand(ctx, h, "update_block", map[string]interface{}{
+			"document_id": updateBlock,
+			"block_id":    blockID,
+			"new_content": contentData,
+		})
+		return
+	}
+	
+	if deleteBlock != "" {
+		if blockID == "" {
+			log.Fatal("Block ID is required for delete operation (use -block-id flag)")
+		}
+		runTerminalCommand(ctx, h, "delete_block", map[string]interface{}{
+			"document_id": deleteBlock,
+			"block_id":    blockID,
+		})
+		return
+	}
+	
+	if moveBlock != "" {
+		if blockID == "" {
+			log.Fatal("Block ID is required for move operation (use -block-id flag)")
+		}
+		if newPosition == "" {
+			log.Fatal("New position is required for move operation (use -new-position flag)")
+		}
+		runTerminalCommand(ctx, h, "move_block", map[string]interface{}{
+			"document_id":  moveBlock,
+			"block_id":     blockID,
+			"new_position": newPosition,
+		})
+		return
+	}
+	
+	if getBlock != "" {
+		if blockID == "" {
+			log.Fatal("Block ID is required for get operation (use -block-id flag)")
+		}
+		runTerminalCommand(ctx, h, "get_block", map[string]interface{}{
+			"document_id": getBlock,
+			"block_id":    blockID,
 		})
 		return
 	}

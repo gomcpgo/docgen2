@@ -275,30 +275,190 @@ func (h *Handler) handleAddMultipleBlocks(ctx context.Context, args map[string]i
 
 // handleUpdateBlock updates an existing block
 func (h *Handler) handleUpdateBlock(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This would require more complex implementation to:
-	// 1. Load the existing block
-	// 2. Update its content
-	// 3. Save it back
-	// For now, returning not implemented
-	return nil, fmt.Errorf("update_block not yet implemented")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	blockID, err := getString(args, "block_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	newContentData, ok := args["new_content"]
+	if !ok {
+		return nil, fmt.Errorf("new_content parameter is required")
+	}
+	
+	newContent, ok := newContentData.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("new_content must be an object")
+	}
+	
+	// First, get the existing block to determine its type
+	doc, err := h.storage.GetDocument(docID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get document: %w", err)
+	}
+	
+	// Find the block to get its type
+	var blockType blocks.BlockType
+	var found bool
+	
+	if doc.HasChapters {
+		for _, chapterRef := range doc.Chapters {
+			chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
+			if err != nil {
+				continue
+			}
+			
+			for _, ref := range chapter.Blocks {
+				if ref.ID == blockID {
+					blockType = ref.Type
+					found = true
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+	} else {
+		for _, ref := range doc.Blocks {
+			if ref.ID == blockID {
+				blockType = ref.Type
+				found = true
+				break
+			}
+		}
+	}
+	
+	if !found {
+		return nil, fmt.Errorf("block not found: %s", blockID)
+	}
+	
+	// Create the new block based on type
+	var newBlock blocks.Block
+	
+	switch blockType {
+	case blocks.TypeHeading:
+		level, err := getInt(newContent, "level", 1)
+		if err != nil {
+			return nil, fmt.Errorf("invalid level: %w", err)
+		}
+		if level < 1 || level > 6 {
+			return nil, fmt.Errorf("heading level must be between 1 and 6")
+		}
+		
+		text, err := getString(newContent, "text", true)
+		if err != nil {
+			return nil, fmt.Errorf("text is required for heading: %w", err)
+		}
+		
+		newBlock = &blocks.HeadingBlock{
+			Level: level,
+			Text:  text,
+		}
+		
+	case blocks.TypeMarkdown:
+		content, err := getString(newContent, "content", true)
+		if err != nil {
+			return nil, fmt.Errorf("content is required for markdown: %w", err)
+		}
+		
+		newBlock = &blocks.MarkdownBlock{
+			Content: content,
+		}
+		
+	case blocks.TypeImage:
+		path, err := getString(newContent, "path", true)
+		if err != nil {
+			return nil, fmt.Errorf("path is required for image: %w", err)
+		}
+		
+		caption, _ := getString(newContent, "caption", false)
+		altText, _ := getString(newContent, "alt_text", false)
+		
+		newBlock = &blocks.ImageBlock{
+			Path:    path,
+			Caption: caption,
+			AltText: altText,
+		}
+		
+	case blocks.TypeTable:
+		headers, err := getStringArray(newContent, "headers", true)
+		if err != nil {
+			return nil, fmt.Errorf("headers are required for table: %w", err)
+		}
+		
+		rows, err := getStringArray2D(newContent, "rows", true)
+		if err != nil {
+			return nil, fmt.Errorf("rows are required for table: %w", err)
+		}
+		
+		newBlock = &blocks.TableBlock{
+			Headers: headers,
+			Rows:    rows,
+		}
+		
+	case blocks.TypePageBreak:
+		newBlock = &blocks.PageBreakBlock{}
+		
+	default:
+		return nil, fmt.Errorf("unknown block type: %s", blockType)
+	}
+	
+	// Update the block
+	if err := h.storage.UpdateBlock(docID, blockID, newBlock); err != nil {
+		return nil, fmt.Errorf("failed to update block: %w", err)
+	}
+	
+	return successResponse(fmt.Sprintf("Updated block %s", blockID)), nil
 }
 
 // handleDeleteBlock deletes a block
 func (h *Handler) handleDeleteBlock(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This would require implementation in storage layer to:
-	// 1. Find the block in document/chapter
-	// 2. Remove it from the manifest
-	// 3. Delete the block file
-	return nil, fmt.Errorf("delete_block not yet implemented")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	blockID, err := getString(args, "block_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	if err := h.storage.DeleteBlock(docID, blockID); err != nil {
+		return nil, fmt.Errorf("failed to delete block: %w", err)
+	}
+	
+	return successResponse(fmt.Sprintf("Deleted block %s", blockID)), nil
 }
 
 // handleMoveBlock moves a block to a new position
 func (h *Handler) handleMoveBlock(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This would require implementation to:
-	// 1. Find the block in document/chapter
-	// 2. Remove it from current position
-	// 3. Insert it at new position
-	return nil, fmt.Errorf("move_block not yet implemented")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	blockID, err := getString(args, "block_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	newPositionStr, err := getString(args, "new_position", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	newPosition := document.ParsePosition(newPositionStr)
+	
+	if err := h.storage.MoveBlock(docID, blockID, newPosition); err != nil {
+		return nil, fmt.Errorf("failed to move block: %w", err)
+	}
+	
+	return successResponse(fmt.Sprintf("Moved block %s to position %s", blockID, newPositionStr)), nil
 }
 
 // handleGetBlock gets a specific block's content

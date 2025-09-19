@@ -635,3 +635,258 @@ func (s *Storage) CopyImageToAssets(docID, sourcePath string) (string, error) {
 	// Return relative path
 	return filepath.Join("assets", assetName), nil
 }
+
+// UpdateBlock updates an existing block's content
+func (s *Storage) UpdateBlock(docID, blockID string, newBlock blocks.Block) error {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return err
+	}
+	
+	// Find the block in document or chapters
+	var blockRef *blocks.BlockReference
+	var chapterID string
+	
+	if doc.HasChapters {
+		// Search in chapters
+		for _, chapterRef := range doc.Chapters {
+			chapter, err := s.GetChapter(docID, chapterRef.ID)
+			if err != nil {
+				continue
+			}
+			
+			for i, ref := range chapter.Blocks {
+				if ref.ID == blockID {
+					blockRef = &chapter.Blocks[i]
+					chapterID = chapterRef.ID
+					break
+				}
+			}
+			if blockRef != nil {
+				break
+			}
+		}
+	} else {
+		// Search in flat document
+		for i, ref := range doc.Blocks {
+			if ref.ID == blockID {
+				blockRef = &doc.Blocks[i]
+				break
+			}
+		}
+	}
+	
+	if blockRef == nil {
+		return fmt.Errorf("block not found: %s", blockID)
+	}
+	
+	// Verify block type matches
+	if blockRef.Type != newBlock.GetType() {
+		return fmt.Errorf("cannot change block type from %s to %s", blockRef.Type, newBlock.GetType())
+	}
+	
+	// Set the block ID to match the existing one
+	switch b := newBlock.(type) {
+	case *blocks.HeadingBlock:
+		b.ID = blockID
+	case *blocks.MarkdownBlock:
+		b.ID = blockID
+	case *blocks.ImageBlock:
+		b.ID = blockID
+	case *blocks.TableBlock:
+		b.ID = blockID
+	case *blocks.PageBreakBlock:
+		b.ID = blockID
+	}
+	
+	// Save updated block file
+	_, err = s.saveBlockFile(docID, chapterID, newBlock)
+	if err != nil {
+		return fmt.Errorf("failed to save updated block: %w", err)
+	}
+	
+	// Update the document's updated timestamp
+	return s.SaveDocument(docID, doc)
+}
+
+// DeleteBlock removes a block from a document
+func (s *Storage) DeleteBlock(docID, blockID string) error {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return err
+	}
+	
+	var blockRef *blocks.BlockReference
+	var chapterID string
+	var blockIndex int
+	var found bool
+	
+	if doc.HasChapters {
+		// Search in chapters
+		for _, chapterRef := range doc.Chapters {
+			chapter, err := s.GetChapter(docID, chapterRef.ID)
+			if err != nil {
+				continue
+			}
+			
+			for i, ref := range chapter.Blocks {
+				if ref.ID == blockID {
+					blockRef = &ref
+					chapterID = chapterRef.ID
+					blockIndex = i
+					found = true
+					break
+				}
+			}
+			if found {
+				// Remove block from chapter
+				chapter.Blocks = append(chapter.Blocks[:blockIndex], chapter.Blocks[blockIndex+1:]...)
+				if err := s.SaveChapter(docID, chapterID, chapter); err != nil {
+					return fmt.Errorf("failed to update chapter: %w", err)
+				}
+				break
+			}
+		}
+	} else {
+		// Search in flat document
+		for i, ref := range doc.Blocks {
+			if ref.ID == blockID {
+				blockRef = &ref
+				blockIndex = i
+				found = true
+				break
+			}
+		}
+		
+		if found {
+			// Remove block from document
+			doc.Blocks = append(doc.Blocks[:blockIndex], doc.Blocks[blockIndex+1:]...)
+		}
+	}
+	
+	if !found {
+		return fmt.Errorf("block not found: %s", blockID)
+	}
+	
+	// Delete the block file
+	blockPath := filepath.Join(s.config.GetDocumentFolder(docID), blockRef.File)
+	if err := os.Remove(blockPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete block file: %w", err)
+	}
+	
+	// Update document timestamp
+	return s.SaveDocument(docID, doc)
+}
+
+// MoveBlock moves a block to a new position
+func (s *Storage) MoveBlock(docID, blockID string, newPosition document.Position) error {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return err
+	}
+	
+	var blockRef blocks.BlockReference
+	var sourceChapterID string
+	var found bool
+	
+	// Find and remove the block from its current position
+	if doc.HasChapters {
+		// Search in chapters
+		for _, chapterRef := range doc.Chapters {
+			chapter, err := s.GetChapter(docID, chapterRef.ID)
+			if err != nil {
+				continue
+			}
+			
+			for i, ref := range chapter.Blocks {
+				if ref.ID == blockID {
+					blockRef = ref
+					sourceChapterID = chapterRef.ID
+					found = true
+					
+					// Remove from current position
+					chapter.Blocks = append(chapter.Blocks[:i], chapter.Blocks[i+1:]...)
+					if err := s.SaveChapter(docID, sourceChapterID, chapter); err != nil {
+						return fmt.Errorf("failed to update source chapter: %w", err)
+					}
+					break
+				}
+			}
+			if found {
+				break
+			}
+		}
+	} else {
+		// Search in flat document
+		for i, ref := range doc.Blocks {
+			if ref.ID == blockID {
+				blockRef = ref
+				found = true
+				
+				// Remove from current position
+				doc.Blocks = append(doc.Blocks[:i], doc.Blocks[i+1:]...)
+				break
+			}
+		}
+	}
+	
+	if !found {
+		return fmt.Errorf("block not found: %s", blockID)
+	}
+	
+	// Insert at new position (same logic as insertBlockAtPosition)
+	if doc.HasChapters {
+		// For chaptered documents, move within the same chapter for now
+		// (cross-chapter moves would need additional parameters)
+		if sourceChapterID != "" {
+			chapter, err := s.GetChapter(docID, sourceChapterID)
+			if err != nil {
+				return err
+			}
+			
+			chapter.Blocks = s.insertBlockAtPosition(chapter.Blocks, blockRef, newPosition)
+			if err := s.SaveChapter(docID, sourceChapterID, chapter); err != nil {
+				return fmt.Errorf("failed to update chapter: %w", err)
+			}
+		}
+	} else {
+		// Insert in flat document
+		doc.Blocks = s.insertBlockAtPosition(doc.Blocks, blockRef, newPosition)
+	}
+	
+	// Update document timestamp
+	return s.SaveDocument(docID, doc)
+}
+
+// FindBlockLocation finds the location of a block (which chapter it's in)
+func (s *Storage) FindBlockLocation(docID, blockID string) (chapterID string, blockIndex int, err error) {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return "", -1, err
+	}
+	
+	if doc.HasChapters {
+		// Search in chapters
+		for _, chapterRef := range doc.Chapters {
+			chapter, err := s.GetChapter(docID, chapterRef.ID)
+			if err != nil {
+				continue
+			}
+			
+			for i, ref := range chapter.Blocks {
+				if ref.ID == blockID {
+					return chapterRef.ID, i, nil
+				}
+			}
+		}
+	} else {
+		// Search in flat document
+		for i, ref := range doc.Blocks {
+			if ref.ID == blockID {
+				return "", i, nil
+			}
+		}
+	}
+	
+	return "", -1, fmt.Errorf("block not found: %s", blockID)
+}
