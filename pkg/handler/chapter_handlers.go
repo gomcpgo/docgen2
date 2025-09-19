@@ -124,10 +124,28 @@ func (h *Handler) handleMoveChapter(ctx context.Context, args map[string]interfa
 
 // handleExportDocument exports a document to various formats
 func (h *Handler) handleExportDocument(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This is a placeholder - export functionality will be implemented later
-	// It will require:
-	// 1. Consolidating all blocks into markdown
-	// 2. Running Pandoc with appropriate options
-	// 3. Returning the exported file path
-	return nil, fmt.Errorf("export_document not yet implemented - requires Pandoc integration")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	format, err := getString(args, "format", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Export the document
+	outputPath, err := h.exporter.ExportDocument(docID, format)
+	if err != nil {
+		return nil, fmt.Errorf("failed to export document: %w", err)
+	}
+	
+	result := map[string]interface{}{
+		"document_id": docID,
+		"format":      format,
+		"output_path": outputPath,
+		"message":     fmt.Sprintf("Document exported successfully to %s", outputPath),
+	}
+	
+	return jsonResponse(result)
 }

@@ -7,6 +7,7 @@ import (
 	
 	"github.com/gomcpgo/mcp/pkg/protocol"
 	"github.com/savant/mcp-servers/docgen2/pkg/config"
+	"github.com/savant/mcp-servers/docgen2/pkg/export"
 	"github.com/savant/mcp-servers/docgen2/pkg/search"
 	"github.com/savant/mcp-servers/docgen2/pkg/storage"
 )
@@ -15,6 +16,7 @@ import (
 type Handler struct {
 	storage  *storage.Storage
 	searcher *search.Searcher
+	exporter *export.Exporter
 	config   *config.Config
 }
 
@@ -24,6 +26,7 @@ func NewHandler(cfg *config.Config) *Handler {
 	return &Handler{
 		storage:  stor,
 		searcher: search.NewSearcher(stor),
+		exporter: export.NewExporter(cfg, stor),
 		config:   cfg,
 	}
 }
