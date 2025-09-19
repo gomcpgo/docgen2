@@ -890,3 +890,116 @@ func (s *Storage) FindBlockLocation(docID, blockID string) (chapterID string, bl
 	
 	return "", -1, fmt.Errorf("block not found: %s", blockID)
 }
+
+// UpdateChapter updates a chapter's title
+func (s *Storage) UpdateChapter(docID, chapterID, newTitle string) error {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return err
+	}
+	
+	if !doc.HasChapters {
+		return fmt.Errorf("document does not have chapters")
+	}
+	
+	// Find and update chapter in document manifest
+	found := false
+	for i, chapterRef := range doc.Chapters {
+		if chapterRef.ID == chapterID {
+			doc.Chapters[i].Title = newTitle
+			found = true
+			break
+		}
+	}
+	
+	if !found {
+		return fmt.Errorf("chapter not found: %s", chapterID)
+	}
+	
+	// Update chapter file
+	chapter, err := s.GetChapter(docID, chapterID)
+	if err != nil {
+		return err
+	}
+	
+	chapter.Title = newTitle
+	if err := s.SaveChapter(docID, chapterID, chapter); err != nil {
+		return err
+	}
+	
+	// Save document manifest
+	return s.SaveDocument(docID, doc)
+}
+
+// DeleteChapter deletes a chapter and all its contents
+func (s *Storage) DeleteChapter(docID, chapterID string) error {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return err
+	}
+	
+	if !doc.HasChapters {
+		return fmt.Errorf("document does not have chapters")
+	}
+	
+	// Find chapter index
+	chapterIndex := -1
+	for i, chapterRef := range doc.Chapters {
+		if chapterRef.ID == chapterID {
+			chapterIndex = i
+			break
+		}
+	}
+	
+	if chapterIndex == -1 {
+		return fmt.Errorf("chapter not found: %s", chapterID)
+	}
+	
+	// Remove chapter from manifest
+	doc.Chapters = append(doc.Chapters[:chapterIndex], doc.Chapters[chapterIndex+1:]...)
+	
+	// Delete chapter directory and all its contents
+	chapterDir := filepath.Join(s.config.GetDocumentFolder(docID), "chapters", chapterID)
+	if err := os.RemoveAll(chapterDir); err != nil {
+		return fmt.Errorf("failed to delete chapter directory: %w", err)
+	}
+	
+	// Save updated document manifest
+	return s.SaveDocument(docID, doc)
+}
+
+// MoveChapter moves a chapter to a new position in the document
+func (s *Storage) MoveChapter(docID, chapterID string, newPosition document.Position) error {
+	doc, err := s.GetDocument(docID)
+	if err != nil {
+		return err
+	}
+	
+	if !doc.HasChapters {
+		return fmt.Errorf("document does not have chapters")
+	}
+	
+	// Find current chapter
+	var targetChapter document.ChapterReference
+	currentIndex := -1
+	for i, chapterRef := range doc.Chapters {
+		if chapterRef.ID == chapterID {
+			targetChapter = chapterRef
+			currentIndex = i
+			break
+		}
+	}
+	
+	if currentIndex == -1 {
+		return fmt.Errorf("chapter not found: %s", chapterID)
+	}
+	
+	// Remove chapter from current position
+	remainingChapters := append(doc.Chapters[:currentIndex], doc.Chapters[currentIndex+1:]...)
+	
+	// Insert at new position
+	doc.Chapters = s.insertChapterAtPosition(remainingChapters, targetChapter, newPosition)
+	
+	// Save document manifest
+	return s.SaveDocument(docID, doc)
+}

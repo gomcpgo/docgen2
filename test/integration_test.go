@@ -760,3 +760,320 @@ func findInString(s, substr string) bool {
 	}
 	return false
 }
+
+func TestUpdateChapterFlow(t *testing.T) {
+	h, cleanup := setupTestHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	
+	// Create a chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Chapter Update Test",
+			"has_chapters": true,
+		},
+	}
+	
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add a chapter
+	addChapterReq := &protocol.CallToolRequest{
+		Name: "add_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "chapter-update-test",
+			"title":       "Original Chapter Title",
+		},
+	}
+	
+	addResp, err := h.CallTool(ctx, addChapterReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	addContent := addResp.Content[0].Text
+	if !contains(addContent, "ch-001") {
+		t.Fatal("Chapter ID should be returned")
+	}
+	
+	// Update the chapter title
+	updateReq := &protocol.CallToolRequest{
+		Name: "update_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "chapter-update-test",
+			"chapter_id":  "ch-001",
+			"new_title":   "Updated Chapter Title",
+		},
+	}
+	
+	updateResp, err := h.CallTool(ctx, updateReq)
+	if err != nil {
+		t.Fatalf("Failed to update chapter: %v", err)
+	}
+	
+	updateContent := updateResp.Content[0].Text
+	if !contains(updateContent, "Updated Chapter Title") {
+		t.Fatal("Response should contain new title")
+	}
+	
+	// Verify the update by getting overview
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "chapter-update-test",
+		},
+	}
+	
+	overviewResp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	overviewContent := overviewResp.Content[0].Text
+	if !contains(overviewContent, "Updated Chapter Title") {
+		t.Fatal("Overview should show updated chapter title")
+	}
+}
+
+func TestDeleteChapterFlow(t *testing.T) {
+	h, cleanup := setupTestHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	
+	// Create a chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Chapter Delete Test",
+			"has_chapters": true,
+		},
+	}
+	
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add two chapters
+	for i := 1; i <= 2; i++ {
+		addChapterReq := &protocol.CallToolRequest{
+			Name: "add_chapter",
+			Arguments: map[string]interface{}{
+				"document_id": "chapter-delete-test",
+				"title":       fmt.Sprintf("Chapter %d", i),
+			},
+		}
+		
+		_, err = h.CallTool(ctx, addChapterReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	
+	// Verify both chapters exist
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "chapter-delete-test",
+		},
+	}
+	
+	overviewResp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	overviewContent := overviewResp.Content[0].Text
+	if !contains(overviewContent, "ch-001") || !contains(overviewContent, "ch-002") {
+		t.Fatal("Both chapters should exist")
+	}
+	
+	// Delete the first chapter
+	deleteReq := &protocol.CallToolRequest{
+		Name: "delete_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "chapter-delete-test",
+			"chapter_id":  "ch-001",
+		},
+	}
+	
+	deleteResp, err := h.CallTool(ctx, deleteReq)
+	if err != nil {
+		t.Fatalf("Failed to delete chapter: %v", err)
+	}
+	
+	deleteContent := deleteResp.Content[0].Text
+	if !contains(deleteContent, "Deleted chapter ch-001") {
+		t.Fatal("Response should confirm deletion")
+	}
+	
+	// Verify chapter is gone
+	overviewResp2, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	overviewContent2 := overviewResp2.Content[0].Text
+	if contains(overviewContent2, "ch-001") {
+		t.Fatal("Deleted chapter should not appear in overview")
+	}
+	if !contains(overviewContent2, "ch-002") {
+		t.Fatal("Remaining chapter should still exist")
+	}
+}
+
+func TestMoveChapterFlow(t *testing.T) {
+	h, cleanup := setupTestHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	
+	// Create a chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Chapter Move Test",
+			"has_chapters": true,
+		},
+	}
+	
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add three chapters
+	for i := 1; i <= 3; i++ {
+		addChapterReq := &protocol.CallToolRequest{
+			Name: "add_chapter",
+			Arguments: map[string]interface{}{
+				"document_id": "chapter-move-test",
+				"title":       fmt.Sprintf("Chapter %d", i),
+			},
+		}
+		
+		_, err = h.CallTool(ctx, addChapterReq)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	
+	// Move chapter 3 to the start
+	moveReq := &protocol.CallToolRequest{
+		Name: "move_chapter",
+		Arguments: map[string]interface{}{
+			"document_id":  "chapter-move-test",
+			"chapter_id":   "ch-003",
+			"new_position": "start",
+		},
+	}
+	
+	moveResp, err := h.CallTool(ctx, moveReq)
+	if err != nil {
+		t.Fatalf("Failed to move chapter: %v", err)
+	}
+	
+	moveContent := moveResp.Content[0].Text
+	if !contains(moveContent, "Moved chapter ch-003") {
+		t.Fatal("Response should confirm move")
+	}
+	
+	// Verify the new order
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "chapter-move-test",
+		},
+	}
+	
+	overviewResp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	overviewContent := overviewResp.Content[0].Text
+	// Check that chapter 3 appears before chapter 1 in the response
+	ch3Index := findIndex(overviewContent, "ch-003")
+	ch1Index := findIndex(overviewContent, "ch-001")
+	
+	if ch3Index == -1 || ch1Index == -1 {
+		t.Fatal("Both chapters should exist in overview")
+	}
+	
+	if ch3Index > ch1Index {
+		t.Fatal("Chapter 3 should appear before Chapter 1 after move")
+	}
+}
+
+func TestChapterOperationErrors(t *testing.T) {
+	h, cleanup := setupTestHandler(t)
+	defer cleanup()
+	ctx := context.Background()
+	
+	// Test updating chapter in non-chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Flat Document",
+			"has_chapters": false,
+		},
+	}
+	
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	updateReq := &protocol.CallToolRequest{
+		Name: "update_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "flat-document",
+			"chapter_id":  "ch-001",
+			"new_title":   "New Title",
+		},
+	}
+	
+	_, err = h.CallTool(ctx, updateReq)
+	if err == nil {
+		t.Error("Expected error when updating chapter in non-chaptered document")
+	}
+	
+	// Test deleting non-existent chapter
+	createChapteredReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Chaptered Document",
+			"has_chapters": true,
+		},
+	}
+	
+	_, err = h.CallTool(ctx, createChapteredReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	deleteReq := &protocol.CallToolRequest{
+		Name: "delete_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "chaptered-document",
+			"chapter_id":  "ch-999",
+		},
+	}
+	
+	_, err = h.CallTool(ctx, deleteReq)
+	if err == nil {
+		t.Error("Expected error when deleting non-existent chapter")
+	}
+}
+
+// Helper function to find the index of a substring in a string
+func findIndex(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
+}

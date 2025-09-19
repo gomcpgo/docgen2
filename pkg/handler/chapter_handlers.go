@@ -38,22 +38,88 @@ func (h *Handler) handleAddChapter(ctx context.Context, args map[string]interfac
 
 // handleUpdateChapter updates a chapter's title
 func (h *Handler) handleUpdateChapter(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This would require implementation in storage layer
-	return nil, fmt.Errorf("update_chapter not yet implemented")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	chapterID, err := getString(args, "chapter_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	newTitle, err := getString(args, "new_title", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	if err := h.storage.UpdateChapter(docID, chapterID, newTitle); err != nil {
+		return nil, fmt.Errorf("failed to update chapter: %w", err)
+	}
+	
+	result := map[string]interface{}{
+		"chapter_id": chapterID,
+		"new_title":  newTitle,
+		"message":    fmt.Sprintf("Updated chapter '%s'", newTitle),
+	}
+	
+	return jsonResponse(result)
 }
 
 // handleDeleteChapter deletes a chapter
 func (h *Handler) handleDeleteChapter(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This would require implementation in storage layer to:
-	// 1. Remove chapter from manifest
-	// 2. Delete chapter folder and all its contents
-	return nil, fmt.Errorf("delete_chapter not yet implemented")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	chapterID, err := getString(args, "chapter_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	if err := h.storage.DeleteChapter(docID, chapterID); err != nil {
+		return nil, fmt.Errorf("failed to delete chapter: %w", err)
+	}
+	
+	result := map[string]interface{}{
+		"chapter_id": chapterID,
+		"message":    fmt.Sprintf("Deleted chapter %s", chapterID),
+	}
+	
+	return jsonResponse(result)
 }
 
 // handleMoveChapter moves a chapter to a new position
 func (h *Handler) handleMoveChapter(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	// This would require implementation to reorder chapters in manifest
-	return nil, fmt.Errorf("move_chapter not yet implemented")
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	chapterID, err := getString(args, "chapter_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	positionStr, err := getString(args, "new_position", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	position := document.ParsePosition(positionStr)
+	
+	if err := h.storage.MoveChapter(docID, chapterID, position); err != nil {
+		return nil, fmt.Errorf("failed to move chapter: %w", err)
+	}
+	
+	result := map[string]interface{}{
+		"chapter_id":   chapterID,
+		"new_position": positionStr,
+		"message":      fmt.Sprintf("Moved chapter %s to position %s", chapterID, positionStr),
+	}
+	
+	return jsonResponse(result)
 }
 
 // handleExportDocument exports a document to various formats

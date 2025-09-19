@@ -769,3 +769,199 @@ func TestFindBlockLocation(t *testing.T) {
 		t.Errorf("Expected index 0, got %d", index)
 	}
 }
+
+func TestUpdateChapter(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a chaptered document
+	docID, err := storage.CreateDocument("Chapter Test Doc", true, "Test Author")
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+	
+	// Add a chapter
+	chapterID, err := storage.AddChapter(docID, "Original Title", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter: %v", err)
+	}
+	
+	// Update the chapter title
+	newTitle := "Updated Chapter Title"
+	err = storage.UpdateChapter(docID, chapterID, newTitle)
+	if err != nil {
+		t.Fatalf("Failed to update chapter: %v", err)
+	}
+	
+	// Verify the chapter was updated in the manifest
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatalf("Failed to get document: %v", err)
+	}
+	
+	found := false
+	for _, chapterRef := range doc.Chapters {
+		if chapterRef.ID == chapterID && chapterRef.Title == newTitle {
+			found = true
+			break
+		}
+	}
+	
+	if !found {
+		t.Errorf("Chapter title was not updated in document manifest")
+	}
+	
+	// Verify the chapter file was updated
+	chapter, err := storage.GetChapter(docID, chapterID)
+	if err != nil {
+		t.Fatalf("Failed to get chapter: %v", err)
+	}
+	
+	if chapter.Title != newTitle {
+		t.Errorf("Expected chapter title %s, got %s", newTitle, chapter.Title)
+	}
+}
+
+func TestUpdateChapterNonChapteredDoc(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a flat document
+	docID, err := storage.CreateDocument("Flat Doc", false, "Test Author")
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+	
+	// Try to update a chapter in a non-chaptered document
+	err = storage.UpdateChapter(docID, "ch-001", "New Title")
+	if err == nil {
+		t.Error("Expected error when updating chapter in non-chaptered document")
+	}
+}
+
+func TestDeleteChapter(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a chaptered document
+	docID, err := storage.CreateDocument("Chapter Test Doc", true, "Test Author")
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+	
+	// Add two chapters
+	chapter1ID, err := storage.AddChapter(docID, "Chapter 1", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter 1: %v", err)
+	}
+	
+	chapter2ID, err := storage.AddChapter(docID, "Chapter 2", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter 2: %v", err)
+	}
+	
+	// Add a block to the first chapter
+	headingBlock := &blocks.HeadingBlock{
+		Level: 1,
+		Text:  "Test Heading in Chapter 1",
+	}
+	
+	err = storage.AddBlock(docID, chapter1ID, headingBlock, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add block to chapter: %v", err)
+	}
+	
+	// Delete the first chapter
+	err = storage.DeleteChapter(docID, chapter1ID)
+	if err != nil {
+		t.Fatalf("Failed to delete chapter: %v", err)
+	}
+	
+	// Verify the chapter was removed from the manifest
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatalf("Failed to get document: %v", err)
+	}
+	
+	if len(doc.Chapters) != 1 {
+		t.Errorf("Expected 1 chapter after deletion, got %d", len(doc.Chapters))
+	}
+	
+	if doc.Chapters[0].ID != chapter2ID {
+		t.Errorf("Expected remaining chapter to be %s, got %s", chapter2ID, doc.Chapters[0].ID)
+	}
+	
+	// Verify the chapter file is gone (should return error)
+	_, err = storage.GetChapter(docID, chapter1ID)
+	if err == nil {
+		t.Error("Expected error when getting deleted chapter")
+	}
+}
+
+func TestMoveChapter(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a chaptered document
+	docID, err := storage.CreateDocument("Chapter Test Doc", true, "Test Author")
+	if err != nil {
+		t.Fatalf("Failed to create document: %v", err)
+	}
+	
+	// Add three chapters
+	chapter1ID, err := storage.AddChapter(docID, "Chapter 1", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter 1: %v", err)
+	}
+	
+	chapter2ID, err := storage.AddChapter(docID, "Chapter 2", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter 2: %v", err)
+	}
+	
+	chapter3ID, err := storage.AddChapter(docID, "Chapter 3", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter 3: %v", err)
+	}
+	
+	// Move chapter 3 to the start
+	err = storage.MoveChapter(docID, chapter3ID, document.Position{Type: document.PositionStart})
+	if err != nil {
+		t.Fatalf("Failed to move chapter: %v", err)
+	}
+	
+	// Verify the new order
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatalf("Failed to get document: %v", err)
+	}
+	
+	expectedOrder := []string{chapter3ID, chapter1ID, chapter2ID}
+	for i, expected := range expectedOrder {
+		if doc.Chapters[i].ID != expected {
+			t.Errorf("Expected chapter at position %d to be %s, got %s", i, expected, doc.Chapters[i].ID)
+		}
+	}
+	
+	// Move chapter 1 after chapter 3
+	err = storage.MoveChapter(docID, chapter1ID, document.Position{
+		Type:    document.PositionAfter,
+		BlockID: chapter3ID,
+	})
+	if err != nil {
+		t.Fatalf("Failed to move chapter after another: %v", err)
+	}
+	
+	// Verify the new order
+	doc, err = storage.GetDocument(docID)
+	if err != nil {
+		t.Fatalf("Failed to get document: %v", err)
+	}
+	
+	expectedOrder = []string{chapter3ID, chapter1ID, chapter2ID}
+	for i, expected := range expectedOrder {
+		if doc.Chapters[i].ID != expected {
+			t.Errorf("Expected chapter at position %d to be %s, got %s", i, expected, doc.Chapters[i].ID)
+		}
+	}
+}

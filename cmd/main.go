@@ -37,6 +37,15 @@ func main() {
 		blockID         string
 		newPosition     string
 		newContent      string
+		
+		// Chapter operations
+		addChapter      string
+		chapterTitle    string
+		updateChapter   string
+		deleteChapter   string
+		moveChapter     string
+		chapterID       string
+		newTitle        string
 	)
 	
 	flag.StringVar(&createDoc, "create", "", "Create a new document with the given title")
@@ -59,6 +68,15 @@ func main() {
 	flag.StringVar(&blockID, "block-id", "", "Block ID for block operations")
 	flag.StringVar(&newPosition, "new-position", "", "New position for move operation (start, end, after:block-id)")
 	flag.StringVar(&newContent, "new-content", "", "New content for update operation (JSON format)")
+	
+	// Chapter operation flags
+	flag.StringVar(&addChapter, "add-chapter", "", "Add chapter to document (specify doc ID)")
+	flag.StringVar(&chapterTitle, "chapter-title", "", "Chapter title for add operation")
+	flag.StringVar(&updateChapter, "update-chapter", "", "Update chapter in document (specify doc ID)")
+	flag.StringVar(&deleteChapter, "delete-chapter", "", "Delete chapter from document (specify doc ID)")
+	flag.StringVar(&moveChapter, "move-chapter", "", "Move chapter in document (specify doc ID)")
+	flag.StringVar(&chapterID, "chapter-id", "", "Chapter ID for chapter operations")
+	flag.StringVar(&newTitle, "new-title", "", "New title for chapter update operation")
 	
 	flag.Parse()
 	
@@ -179,6 +197,58 @@ func main() {
 		runTerminalCommand(ctx, h, "get_block", map[string]interface{}{
 			"document_id": getBlock,
 			"block_id":    blockID,
+		})
+		return
+	}
+	
+	if addChapter != "" {
+		if chapterTitle == "" {
+			log.Fatal("Chapter title is required for add operation (use -chapter-title flag)")
+		}
+		runTerminalCommand(ctx, h, "add_chapter", map[string]interface{}{
+			"document_id": addChapter,
+			"title":       chapterTitle,
+		})
+		return
+	}
+	
+	if updateChapter != "" {
+		if chapterID == "" {
+			log.Fatal("Chapter ID is required for update operation (use -chapter-id flag)")
+		}
+		if newTitle == "" {
+			log.Fatal("New title is required for update operation (use -new-title flag)")
+		}
+		runTerminalCommand(ctx, h, "update_chapter", map[string]interface{}{
+			"document_id": updateChapter,
+			"chapter_id":  chapterID,
+			"new_title":   newTitle,
+		})
+		return
+	}
+	
+	if deleteChapter != "" {
+		if chapterID == "" {
+			log.Fatal("Chapter ID is required for delete operation (use -chapter-id flag)")
+		}
+		runTerminalCommand(ctx, h, "delete_chapter", map[string]interface{}{
+			"document_id": deleteChapter,
+			"chapter_id":  chapterID,
+		})
+		return
+	}
+	
+	if moveChapter != "" {
+		if chapterID == "" {
+			log.Fatal("Chapter ID is required for move operation (use -chapter-id flag)")
+		}
+		if newPosition == "" {
+			log.Fatal("New position is required for move operation (use -new-position flag)")
+		}
+		runTerminalCommand(ctx, h, "move_chapter", map[string]interface{}{
+			"document_id":  moveChapter,
+			"chapter_id":   chapterID,
+			"new_position": newPosition,
 		})
 		return
 	}
