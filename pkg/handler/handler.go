@@ -7,20 +7,24 @@ import (
 	
 	"github.com/gomcpgo/mcp/pkg/protocol"
 	"github.com/savant/mcp-servers/docgen2/pkg/config"
+	"github.com/savant/mcp-servers/docgen2/pkg/search"
 	"github.com/savant/mcp-servers/docgen2/pkg/storage"
 )
 
 // Handler implements the MCP tool handlers for DocGen2
 type Handler struct {
-	storage *storage.Storage
-	config  *config.Config
+	storage  *storage.Storage
+	searcher *search.Searcher
+	config   *config.Config
 }
 
 // NewHandler creates a new Handler instance
 func NewHandler(cfg *config.Config) *Handler {
+	stor := storage.NewStorage(cfg)
 	return &Handler{
-		storage: storage.NewStorage(cfg),
-		config:  cfg,
+		storage:  stor,
+		searcher: search.NewSearcher(stor),
+		config:   cfg,
 	}
 }
 
