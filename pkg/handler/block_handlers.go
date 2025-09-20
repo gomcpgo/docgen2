@@ -528,20 +528,20 @@ func (h *Handler) handleGetBlock(ctx context.Context, args map[string]interface{
 	switch b := block.(type) {
 	case *blocks.HeadingBlock:
 		result = map[string]interface{}{
-			"id":    b.ID,
+			"id":    blockRef.ID,
 			"type":  "heading",
 			"level": b.Level,
 			"text":  b.Text,
 		}
 	case *blocks.MarkdownBlock:
 		result = map[string]interface{}{
-			"id":      b.ID,
+			"id":      blockRef.ID,
 			"type":    "markdown",
 			"content": b.Content,
 		}
 	case *blocks.ImageBlock:
 		result = map[string]interface{}{
-			"id":       b.ID,
+			"id":       blockRef.ID,
 			"type":     "image",
 			"path":     b.Path,
 			"caption":  b.Caption,
@@ -549,17 +549,136 @@ func (h *Handler) handleGetBlock(ctx context.Context, args map[string]interface{
 		}
 	case *blocks.TableBlock:
 		result = map[string]interface{}{
-			"id":      b.ID,
+			"id":      blockRef.ID,
 			"type":    "table",
 			"headers": b.Headers,
 			"rows":    b.Rows,
 		}
 	case *blocks.PageBreakBlock:
 		result = map[string]interface{}{
-			"id":   b.ID,
+			"id":   blockRef.ID,
 			"type": "page_break",
 		}
 	}
 	
 	return jsonResponse(result)
+}
+
+// handleGetBlocks gets multiple blocks' content in a single request
+func (h *Handler) handleGetBlocks(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	blockIDs, err := getStringArray(args, "block_ids", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	if len(blockIDs) == 0 {
+		return jsonResponse([]map[string]interface{}{})
+	}
+	
+	
+	// Load document to get block references
+	doc, err := h.storage.GetDocument(docID)
+	if err != nil {
+		// Return empty array instead of error to avoid breaking the frontend
+		return jsonResponse([]map[string]interface{}{})
+	}
+	
+	// Build a map of block ID to reference for quick lookup
+	blockRefMap := make(map[string]*blocks.BlockReference)
+	
+	if doc.HasChapters {
+		// Search in chapters
+		for _, chapterRef := range doc.Chapters {
+			chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
+			if err != nil {
+				continue
+			}
+			
+			for _, ref := range chapter.Blocks {
+				blockRefMap[ref.ID] = &blocks.BlockReference{
+					ID:   ref.ID,
+					Type: ref.Type,
+					File: ref.File,
+				}
+			}
+		}
+	} else {
+		// Search in flat document
+		for _, ref := range doc.Blocks {
+			blockRefMap[ref.ID] = &blocks.BlockReference{
+				ID:   ref.ID,
+				Type: ref.Type,
+				File: ref.File,
+			}
+		}
+	}
+	
+	
+	// Load and convert requested blocks
+	results := make([]map[string]interface{}, 0)
+	
+	for _, blockID := range blockIDs {
+		blockRef, found := blockRefMap[blockID]
+		if !found {
+			// Skip blocks that don't exist
+			continue
+		}
+		
+		// Load the block
+		block, err := h.storage.LoadBlock(docID, *blockRef)
+		if err != nil {
+			// Skip blocks that can't be loaded
+			continue
+		}
+		
+		// Convert block to response format
+		var blockData map[string]interface{}
+		
+		switch b := block.(type) {
+		case *blocks.HeadingBlock:
+			blockData = map[string]interface{}{
+				"id":    blockRef.ID,
+				"type":  "heading",
+				"level": b.Level,
+				"text":  b.Text,
+			}
+		case *blocks.MarkdownBlock:
+			blockData = map[string]interface{}{
+				"id":      blockRef.ID,
+				"type":    "markdown",
+				"content": b.Content,
+			}
+		case *blocks.ImageBlock:
+			blockData = map[string]interface{}{
+				"id":       blockRef.ID,
+				"type":     "image",
+				"path":     b.Path,
+				"caption":  b.Caption,
+				"alt_text": b.AltText,
+			}
+		case *blocks.TableBlock:
+			blockData = map[string]interface{}{
+				"id":      blockRef.ID,
+				"type":    "table",
+				"headers": b.Headers,
+				"rows":    b.Rows,
+			}
+		case *blocks.PageBreakBlock:
+			blockData = map[string]interface{}{
+				"id":   blockRef.ID,
+				"type": "page_break",
+			}
+		}
+		
+		if blockData != nil {
+			results = append(results, blockData)
+		}
+	}
+	
+	return jsonResponse(results)
 }
