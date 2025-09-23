@@ -1100,6 +1100,277 @@ func TestImageBlockLegacyAbsolutePath(t *testing.T) {
 	}
 }
 
+func TestMixedDocumentBlocksAndChapters(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a chaptered document that will have both document blocks and chapters
+	docID, err := storage.CreateDocument("Mixed Document Test", true, "Test Author")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add document-level blocks first
+	docHeading := &blocks.HeadingBlock{
+		Level: 1,
+		Text:  "Document Introduction",
+	}
+	err = storage.AddBlock(docID, "", docHeading, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add document-level heading: %v", err)
+	}
+	
+	docMarkdown := &blocks.MarkdownBlock{
+		Content: "This is document-level content that appears before chapters.",
+	}
+	err = storage.AddBlock(docID, "", docMarkdown, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add document-level markdown: %v", err)
+	}
+	
+	// Add a chapter
+	chapterID, err := storage.AddChapter(docID, "Chapter One", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add blocks to the chapter
+	chapterHeading := &blocks.HeadingBlock{
+		Level: 2,
+		Text:  "Chapter One Content",
+	}
+	err = storage.AddBlock(docID, chapterID, chapterHeading, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter heading: %v", err)
+	}
+	
+	chapterMarkdown := &blocks.MarkdownBlock{
+		Content: "This is chapter-specific content.",
+	}
+	err = storage.AddBlock(docID, chapterID, chapterMarkdown, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add chapter markdown: %v", err)
+	}
+	
+	// Verify the document structure
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Should have both document-level blocks and chapters
+	if len(doc.Blocks) != 2 {
+		t.Errorf("Expected 2 document-level blocks, got %d", len(doc.Blocks))
+	}
+	
+	if len(doc.Chapters) != 1 {
+		t.Errorf("Expected 1 chapter, got %d", len(doc.Chapters))
+	}
+	
+	if !doc.HasChapters {
+		t.Error("Document should be marked as having chapters")
+	}
+	
+	// Verify chapter has blocks
+	chapter, err := storage.GetChapter(docID, chapterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(chapter.Blocks) != 2 {
+		t.Errorf("Expected 2 chapter blocks, got %d", len(chapter.Blocks))
+	}
+	
+	// Verify both blocks/ and chapters/ folders exist
+	docPath := storage.config.GetDocumentFolder(docID)
+	blocksPath := filepath.Join(docPath, "blocks")
+	chaptersPath := filepath.Join(docPath, "chapters")
+	
+	if _, err := os.Stat(blocksPath); os.IsNotExist(err) {
+		t.Error("blocks/ folder should exist for mixed documents")
+	}
+	
+	if _, err := os.Stat(chaptersPath); os.IsNotExist(err) {
+		t.Error("chapters/ folder should exist for mixed documents")
+	}
+}
+
+func TestDocumentWithEmptyChapters(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a chaptered document
+	docID, err := storage.CreateDocument("Empty Chapters Test", true, "Test Author")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add document-level blocks
+	heading := &blocks.HeadingBlock{
+		Level: 1,
+		Text:  "Document with Empty Chapters",
+	}
+	err = storage.AddBlock(docID, "", heading, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add a chapter but don't add any blocks to it
+	chapterID, err := storage.AddChapter(docID, "Empty Chapter", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Verify document structure
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(doc.Blocks) != 1 {
+		t.Errorf("Expected 1 document-level block, got %d", len(doc.Blocks))
+	}
+	
+	if len(doc.Chapters) != 1 {
+		t.Errorf("Expected 1 chapter, got %d", len(doc.Chapters))
+	}
+	
+	// Verify chapter exists but is empty
+	chapter, err := storage.GetChapter(docID, chapterID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(chapter.Blocks) != 0 {
+		t.Errorf("Expected empty chapter, got %d blocks", len(chapter.Blocks))
+	}
+}
+
+func TestPureBlocksOnlyDocument(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a flat document (no chapters)
+	docID, err := storage.CreateDocument("Blocks Only Test", false, "Test Author")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add document-level blocks
+	heading := &blocks.HeadingBlock{
+		Level: 1,
+		Text:  "Blocks Only Document",
+	}
+	err = storage.AddBlock(docID, "", heading, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	markdown := &blocks.MarkdownBlock{
+		Content: "This document only has blocks, no chapters.",
+	}
+	err = storage.AddBlock(docID, "", markdown, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Verify document structure
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(doc.Blocks) != 2 {
+		t.Errorf("Expected 2 document-level blocks, got %d", len(doc.Blocks))
+	}
+	
+	if len(doc.Chapters) != 0 {
+		t.Errorf("Expected 0 chapters, got %d", len(doc.Chapters))
+	}
+	
+	if doc.HasChapters {
+		t.Error("Document should not be marked as having chapters")
+	}
+}
+
+func TestPureChaptersOnlyDocument(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create a chaptered document
+	docID, err := storage.CreateDocument("Chapters Only Test", true, "Test Author")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add chapters but no document-level blocks
+	chapter1ID, err := storage.AddChapter(docID, "Chapter One", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	chapter2ID, err := storage.AddChapter(docID, "Chapter Two", document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Add blocks to chapters
+	heading1 := &blocks.HeadingBlock{
+		Level: 1,
+		Text:  "Chapter One Content",
+	}
+	err = storage.AddBlock(docID, chapter1ID, heading1, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	heading2 := &blocks.HeadingBlock{
+		Level: 1,
+		Text:  "Chapter Two Content",
+	}
+	err = storage.AddBlock(docID, chapter2ID, heading2, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Verify document structure
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(doc.Blocks) != 0 {
+		t.Errorf("Expected 0 document-level blocks, got %d", len(doc.Blocks))
+	}
+	
+	if len(doc.Chapters) != 2 {
+		t.Errorf("Expected 2 chapters, got %d", len(doc.Chapters))
+	}
+	
+	if !doc.HasChapters {
+		t.Error("Document should be marked as having chapters")
+	}
+	
+	// Verify chapter blocks
+	chapter1, err := storage.GetChapter(docID, chapter1ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(chapter1.Blocks) != 1 {
+		t.Errorf("Expected 1 block in chapter 1, got %d", len(chapter1.Blocks))
+	}
+	
+	chapter2, err := storage.GetChapter(docID, chapter2ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(chapter2.Blocks) != 1 {
+		t.Errorf("Expected 1 block in chapter 2, got %d", len(chapter2.Blocks))
+	}
+}
+
 func TestImagePathConversion(t *testing.T) {
 	storage, cleanup := setupTestStorage(t)
 	defer cleanup()

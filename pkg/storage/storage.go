@@ -41,17 +41,15 @@ func (s *Storage) CreateDocument(title string, hasChapters bool, author string) 
 		return "", fmt.Errorf("failed to create assets folder: %w", err)
 	}
 	
-	// Create blocks folder for flat documents or chapters folder for chaptered documents
-	if !hasChapters {
-		blocksPath := filepath.Join(docPath, "blocks")
-		if err := os.MkdirAll(blocksPath, 0755); err != nil {
-			return "", fmt.Errorf("failed to create blocks folder: %w", err)
-		}
-	} else {
-		chaptersPath := filepath.Join(docPath, "chapters")
-		if err := os.MkdirAll(chaptersPath, 0755); err != nil {
-			return "", fmt.Errorf("failed to create chapters folder: %w", err)
-		}
+	// Create both blocks and chapters folders to support mixed documents
+	blocksPath := filepath.Join(docPath, "blocks")
+	if err := os.MkdirAll(blocksPath, 0755); err != nil {
+		return "", fmt.Errorf("failed to create blocks folder: %w", err)
+	}
+	
+	chaptersPath := filepath.Join(docPath, "chapters")
+	if err := os.MkdirAll(chaptersPath, 0755); err != nil {
+		return "", fmt.Errorf("failed to create chapters folder: %w", err)
 	}
 	
 	// Create manifest

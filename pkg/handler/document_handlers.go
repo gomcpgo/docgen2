@@ -82,8 +82,13 @@ func (h *Handler) handleGetDocumentOverview(ctx context.Context, args map[string
 		HasChapters: doc.HasChapters,
 	}
 	
-	if doc.HasChapters && len(doc.Chapters) > 0 {
-		// Build chapter overview
+	// Always process document-level blocks first (if they exist)
+	if len(doc.Blocks) > 0 {
+		overview.Blocks = h.buildBlockOverviews(docID, doc.Blocks)
+	}
+	
+	// Then process chapters (if they exist)
+	if len(doc.Chapters) > 0 {
 		for _, chapterRef := range doc.Chapters {
 			chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
 			if err != nil {
@@ -96,22 +101,6 @@ func (h *Handler) handleGetDocumentOverview(ctx context.Context, args map[string
 				Blocks: h.buildBlockOverviews(docID, chapter.Blocks),
 			}
 			overview.Chapters = append(overview.Chapters, chapterOverview)
-		}
-	}
-	
-	// Always include flat blocks if they exist, even in chaptered documents
-	// This handles edge cases where has_chapters is true but no actual chapters exist
-	if len(doc.Blocks) > 0 {
-		overview.Blocks = h.buildBlockOverviews(docID, doc.Blocks)
-		
-		// Log a warning if we have both chapters and flat blocks, or has_chapters is true with no chapters
-		if doc.HasChapters && len(doc.Chapters) == 0 {
-			// Document is marked as chaptered but has no chapters - this is a data inconsistency
-			// We'll still return the flat blocks so the document is usable
-			fmt.Printf("[WARNING] Document %s has has_chapters=true but no chapters, using flat blocks\n", docID)
-		} else if len(overview.Chapters) > 0 {
-			// Document has both chapters and flat blocks - unusual but allowed
-			fmt.Printf("[WARNING] Document %s has both chapters and flat blocks\n", docID)
 		}
 	}
 	

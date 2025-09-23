@@ -28,8 +28,13 @@ func (s *Searcher) SearchDocument(docID, query, chapterID string) ([]document.Se
 	var results []document.SearchResult
 	queryLower := strings.ToLower(query)
 	
-	if doc.HasChapters {
-		// Search in chapters
+	// Search in document-level blocks first (if any)
+	if len(doc.Blocks) > 0 {
+		results = append(results, s.SearchInBlocks(docID, doc.Blocks, queryLower, "")...)
+	}
+
+	// Then search in chapters (if any and if no specific chapter requested, or if the specific chapter is being searched)
+	if len(doc.Chapters) > 0 {
 		for _, chapterRef := range doc.Chapters {
 			// Skip if specific chapter requested and this isn't it
 			if chapterID != "" && chapterRef.ID != chapterID {
@@ -43,9 +48,6 @@ func (s *Searcher) SearchDocument(docID, query, chapterID string) ([]document.Se
 			
 			results = append(results, s.SearchInBlocks(docID, chapter.Blocks, queryLower, chapterRef.ID)...)
 		}
-	} else {
-		// Search in flat document
-		results = append(results, s.SearchInBlocks(docID, doc.Blocks, queryLower, "")...)
 	}
 	
 	return results, nil

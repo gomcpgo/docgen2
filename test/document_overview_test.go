@@ -719,3 +719,426 @@ func TestDocumentOverviewTruncation(t *testing.T) {
 		t.Error("Preview should contain beginning of markdown text")
 	}
 }
+
+func contains(text, substr string) bool {
+	return strings.Contains(text, substr)
+}
+
+func TestDocumentOverviewMixedBlocksAndChapters(t *testing.T) {
+	h, cleanup := setupOverviewTestHandler(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Mixed Document",
+			"has_chapters": true,
+			"author":       "Test Author",
+		},
+	}
+
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add document-level blocks first
+	addHeadingReq := &protocol.CallToolRequest{
+		Name: "add_heading",
+		Arguments: map[string]interface{}{
+			"document_id": "mixed-document",
+			"level":       1,
+			"text":        "Document Introduction",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addHeadingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addMarkdownReq := &protocol.CallToolRequest{
+		Name: "add_markdown",
+		Arguments: map[string]interface{}{
+			"document_id": "mixed-document",
+			"content":     "This is document-level content before chapters.",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addMarkdownReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add a chapter
+	addChapterReq := &protocol.CallToolRequest{
+		Name: "add_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "mixed-document",
+			"title":       "Chapter One",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapterReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add blocks to the chapter
+	addChapterHeadingReq := &protocol.CallToolRequest{
+		Name: "add_heading",
+		Arguments: map[string]interface{}{
+			"document_id": "mixed-document",
+			"chapter_id":  "ch-001",
+			"level":       2,
+			"text":        "Chapter Content",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapterHeadingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get overview
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "mixed-document",
+		},
+	}
+
+	resp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatalf("Failed to get overview: %v", err)
+	}
+
+	content := resp.Content[0].Text
+
+	// Verify structure: should have both blocks and chapters
+	if !contains(content, "Mixed Document") {
+		t.Error("Overview should contain document title")
+	}
+
+	if !contains(content, "\"has_chapters\": true") {
+		t.Error("Overview should indicate chaptered document")
+	}
+
+	// Should have document-level blocks first
+	if !contains(content, "Document Introduction") {
+		t.Error("Overview should contain document-level heading")
+	}
+
+	// Should have chapters after blocks
+	if !contains(content, "Chapter One") {
+		t.Error("Overview should contain chapter title")
+	}
+
+	if !contains(content, "Chapter Content") {
+		t.Error("Overview should contain chapter heading")
+	}
+
+	// Verify JSON structure order (blocks first, then chapters)
+	blocksIndex := strings.Index(content, "\"blocks\":")
+	chaptersIndex := strings.Index(content, "\"chapters\":")
+
+	if blocksIndex == -1 || chaptersIndex == -1 {
+		t.Error("Overview should contain both blocks and chapters sections")
+	}
+
+	if blocksIndex > chaptersIndex {
+		t.Error("Blocks should appear before chapters in the overview")
+	}
+}
+
+func TestDocumentOverviewPureBlocksOnly(t *testing.T) {
+	h, cleanup := setupOverviewTestHandler(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a flat document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Blocks Only Document",
+			"has_chapters": false,
+			"author":       "Test Author",
+		},
+	}
+
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add document-level blocks
+	addHeadingReq := &protocol.CallToolRequest{
+		Name: "add_heading",
+		Arguments: map[string]interface{}{
+			"document_id": "blocks-only-document",
+			"level":       1,
+			"text":        "Main Title",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addHeadingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addMarkdownReq := &protocol.CallToolRequest{
+		Name: "add_markdown",
+		Arguments: map[string]interface{}{
+			"document_id": "blocks-only-document",
+			"content":     "This document only has blocks.",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addMarkdownReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get overview
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "blocks-only-document",
+		},
+	}
+
+	resp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatalf("Failed to get overview: %v", err)
+	}
+
+	content := resp.Content[0].Text
+
+	// Verify structure
+	if !contains(content, "\"has_chapters\": false") {
+		t.Error("Overview should indicate flat document")
+	}
+
+	if !contains(content, "Main Title") {
+		t.Error("Overview should contain heading")
+	}
+
+	if !contains(content, "\"blocks\":") {
+		t.Error("Overview should have blocks section")
+	}
+
+	if contains(content, "\"chapters\":") {
+		t.Error("Overview should not have chapters section for flat document")
+	}
+}
+
+func TestDocumentOverviewPureChaptersOnly(t *testing.T) {
+	h, cleanup := setupOverviewTestHandler(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Chapters Only Document",
+			"has_chapters": true,
+			"author":       "Test Author",
+		},
+	}
+
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add chapters only (no document-level blocks)
+	addChapter1Req := &protocol.CallToolRequest{
+		Name: "add_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "chapters-only-document",
+			"title":       "Chapter One",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapter1Req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addChapter2Req := &protocol.CallToolRequest{
+		Name: "add_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "chapters-only-document",
+			"title":       "Chapter Two",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapter2Req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add content to chapters
+	addChapter1HeadingReq := &protocol.CallToolRequest{
+		Name: "add_heading",
+		Arguments: map[string]interface{}{
+			"document_id": "chapters-only-document",
+			"chapter_id":  "ch-001",
+			"level":       1,
+			"text":        "First Chapter Content",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapter1HeadingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	addChapter2HeadingReq := &protocol.CallToolRequest{
+		Name: "add_heading",
+		Arguments: map[string]interface{}{
+			"document_id": "chapters-only-document",
+			"chapter_id":  "ch-002",
+			"level":       1,
+			"text":        "Second Chapter Content",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapter2HeadingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get overview
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "chapters-only-document",
+		},
+	}
+
+	resp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatalf("Failed to get overview: %v", err)
+	}
+
+	content := resp.Content[0].Text
+
+	// Verify structure
+	if !contains(content, "\"has_chapters\": true") {
+		t.Error("Overview should indicate chaptered document")
+	}
+
+	if !contains(content, "Chapter One") {
+		t.Error("Overview should contain first chapter")
+	}
+
+	if !contains(content, "Chapter Two") {
+		t.Error("Overview should contain second chapter")
+	}
+
+	if !contains(content, "First Chapter Content") {
+		t.Error("Overview should contain first chapter content")
+	}
+
+	if !contains(content, "Second Chapter Content") {
+		t.Error("Overview should contain second chapter content")
+	}
+
+	if !contains(content, "\"chapters\":") {
+		t.Error("Overview should have chapters section")
+	}
+}
+
+func TestDocumentOverviewEmptyChapters(t *testing.T) {
+	h, cleanup := setupOverviewTestHandler(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a chaptered document
+	createReq := &protocol.CallToolRequest{
+		Name: "create_document",
+		Arguments: map[string]interface{}{
+			"title":        "Empty Chapters Document",
+			"has_chapters": true,
+			"author":       "Test Author",
+		},
+	}
+
+	_, err := h.CallTool(ctx, createReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add document-level blocks
+	addHeadingReq := &protocol.CallToolRequest{
+		Name: "add_heading",
+		Arguments: map[string]interface{}{
+			"document_id": "empty-chapters-document",
+			"level":       1,
+			"text":        "Document Header",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addHeadingReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Add an empty chapter (no blocks)
+	addChapterReq := &protocol.CallToolRequest{
+		Name: "add_chapter",
+		Arguments: map[string]interface{}{
+			"document_id": "empty-chapters-document",
+			"title":       "Empty Chapter",
+		},
+	}
+
+	_, err = h.CallTool(ctx, addChapterReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get overview
+	overviewReq := &protocol.CallToolRequest{
+		Name: "get_document_overview",
+		Arguments: map[string]interface{}{
+			"document_id": "empty-chapters-document",
+		},
+	}
+
+	resp, err := h.CallTool(ctx, overviewReq)
+	if err != nil {
+		t.Fatalf("Failed to get overview: %v", err)
+	}
+
+	content := resp.Content[0].Text
+
+	// Verify structure
+	if !contains(content, "\"has_chapters\": true") {
+		t.Error("Overview should indicate chaptered document")
+	}
+
+	if !contains(content, "Document Header") {
+		t.Error("Overview should contain document-level heading")
+	}
+
+	if !contains(content, "Empty Chapter") {
+		t.Error("Overview should contain chapter title")
+	}
+
+	if !contains(content, "\"blocks\":") {
+		t.Error("Overview should have document-level blocks section")
+	}
+
+	if !contains(content, "\"chapters\":") {
+		t.Error("Overview should have chapters section")
+	}
+}

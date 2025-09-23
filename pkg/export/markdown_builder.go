@@ -34,8 +34,17 @@ func (mb *MarkdownBuilder) BuildMarkdown(docID string) (string, error) {
 	}
 	markdown.WriteString("---\n\n")
 
-	if doc.HasChapters {
-		// Process chapters
+	// Process document-level blocks first (if any)
+	if len(doc.Blocks) > 0 {
+		content, err := mb.processBlocks(docID, doc.Blocks)
+		if err != nil {
+			return "", fmt.Errorf("failed to process document blocks: %w", err)
+		}
+		markdown.WriteString(content)
+	}
+
+	// Then process chapters (if any)
+	if len(doc.Chapters) > 0 {
 		for _, chapterRef := range doc.Chapters {
 			chapter, err := mb.storage.GetChapter(docID, chapterRef.ID)
 			if err != nil {
@@ -52,13 +61,6 @@ func (mb *MarkdownBuilder) BuildMarkdown(docID string) (string, error) {
 			}
 			markdown.WriteString(chapterContent)
 		}
-	} else {
-		// Process flat document blocks
-		content, err := mb.processBlocks(docID, doc.Blocks)
-		if err != nil {
-			return "", fmt.Errorf("failed to process document blocks: %w", err)
-		}
-		markdown.WriteString(content)
 	}
 
 	return markdown.String(), nil

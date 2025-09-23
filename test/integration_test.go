@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	
 	"github.com/gomcpgo/mcp/pkg/protocol"
@@ -472,11 +473,11 @@ func TestUpdateBlockFlow(t *testing.T) {
 	
 	// The response should contain the updated content
 	content := getResp.Content[0].Text
-	if !contains(content, "Updated Heading") {
+	if !strings.Contains(content, "Updated Heading") {
 		t.Error("Block should contain updated text")
 	}
 	
-	if !contains(content, "\"level\": 2") {
+	if !strings.Contains(content, "\"level\": 2") {
 		t.Error("Block should have updated level")
 	}
 }
@@ -531,7 +532,7 @@ func TestDeleteBlockFlow(t *testing.T) {
 	}
 	
 	content := overviewResp.Content[0].Text
-	if !contains(content, "hd-001") || !contains(content, "hd-002") || !contains(content, "hd-003") {
+	if !strings.Contains(content, "hd-001") || !strings.Contains(content, "hd-002") || !strings.Contains(content, "hd-003") {
 		t.Fatal("All three blocks should exist")
 	}
 	
@@ -560,11 +561,11 @@ func TestDeleteBlockFlow(t *testing.T) {
 	}
 	
 	content2 := overviewResp2.Content[0].Text
-	if contains(content2, "hd-002") {
+	if strings.Contains(content2, "hd-002") {
 		t.Error("hd-002 should be deleted")
 	}
 	
-	if !contains(content2, "hd-001") || !contains(content2, "hd-003") {
+	if !strings.Contains(content2, "hd-001") || !strings.Contains(content2, "hd-003") {
 		t.Error("Other blocks should still exist")
 	}
 }
@@ -653,7 +654,7 @@ func TestMoveBlockFlow(t *testing.T) {
 	}
 	
 	// Should still contain all blocks
-	if !contains(finalContent, "Block A") || !contains(finalContent, "Block B") || !contains(finalContent, "Block C") {
+	if !strings.Contains(finalContent, "Block A") || !strings.Contains(finalContent, "Block B") || !strings.Contains(finalContent, "Block C") {
 		t.Error("All blocks should still exist after move")
 	}
 }
@@ -744,22 +745,6 @@ func TestDeleteNonexistentBlock(t *testing.T) {
 	}
 }
 
-// Helper function to check if a string contains a substring
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && 
-		   (s == substr || len(s) > len(substr) && 
-		   (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		   findInString(s, substr)))
-}
-
-func findInString(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func TestUpdateChapterFlow(t *testing.T) {
 	h, cleanup := setupTestHandler(t)
@@ -795,7 +780,7 @@ func TestUpdateChapterFlow(t *testing.T) {
 	}
 	
 	addContent := addResp.Content[0].Text
-	if !contains(addContent, "ch-001") {
+	if !strings.Contains(addContent, "ch-001") {
 		t.Fatal("Chapter ID should be returned")
 	}
 	
@@ -815,7 +800,7 @@ func TestUpdateChapterFlow(t *testing.T) {
 	}
 	
 	updateContent := updateResp.Content[0].Text
-	if !contains(updateContent, "Updated Chapter Title") {
+	if !strings.Contains(updateContent, "Updated Chapter Title") {
 		t.Fatal("Response should contain new title")
 	}
 	
@@ -833,7 +818,7 @@ func TestUpdateChapterFlow(t *testing.T) {
 	}
 	
 	overviewContent := overviewResp.Content[0].Text
-	if !contains(overviewContent, "Updated Chapter Title") {
+	if !strings.Contains(overviewContent, "Updated Chapter Title") {
 		t.Fatal("Overview should show updated chapter title")
 	}
 }
@@ -887,7 +872,7 @@ func TestDeleteChapterFlow(t *testing.T) {
 	}
 	
 	overviewContent := overviewResp.Content[0].Text
-	if !contains(overviewContent, "ch-001") || !contains(overviewContent, "ch-002") {
+	if !strings.Contains(overviewContent, "ch-001") || !strings.Contains(overviewContent, "ch-002") {
 		t.Fatal("Both chapters should exist")
 	}
 	
@@ -906,7 +891,7 @@ func TestDeleteChapterFlow(t *testing.T) {
 	}
 	
 	deleteContent := deleteResp.Content[0].Text
-	if !contains(deleteContent, "Deleted chapter ch-001") {
+	if !strings.Contains(deleteContent, "Deleted chapter ch-001") {
 		t.Fatal("Response should confirm deletion")
 	}
 	
@@ -917,10 +902,10 @@ func TestDeleteChapterFlow(t *testing.T) {
 	}
 	
 	overviewContent2 := overviewResp2.Content[0].Text
-	if contains(overviewContent2, "ch-001") {
+	if strings.Contains(overviewContent2, "ch-001") {
 		t.Fatal("Deleted chapter should not appear in overview")
 	}
-	if !contains(overviewContent2, "ch-002") {
+	if !strings.Contains(overviewContent2, "ch-002") {
 		t.Fatal("Remaining chapter should still exist")
 	}
 }
@@ -976,7 +961,7 @@ func TestMoveChapterFlow(t *testing.T) {
 	}
 	
 	moveContent := moveResp.Content[0].Text
-	if !contains(moveContent, "Moved chapter ch-003") {
+	if !strings.Contains(moveContent, "Moved chapter ch-003") {
 		t.Fatal("Response should confirm move")
 	}
 	
