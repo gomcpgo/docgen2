@@ -3,11 +3,63 @@ package handler
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	
 	"github.com/gomcpgo/mcp/pkg/protocol"
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
 	"github.com/savant/mcp-servers/docgen2/pkg/document"
 )
+
+// convertBlockToResponse converts a block to response format for JSON serialization
+// Handles smart path conversion for image blocks - converts relative paths to absolute paths
+func (h *Handler) convertBlockToResponse(block blocks.Block, blockRef blocks.BlockReference, docID string) map[string]interface{} {
+	switch b := block.(type) {
+	case *blocks.HeadingBlock:
+		return map[string]interface{}{
+			"id":    blockRef.ID,
+			"type":  "heading",
+			"level": b.Level,
+			"text":  b.Text,
+		}
+	case *blocks.MarkdownBlock:
+		return map[string]interface{}{
+			"id":      blockRef.ID,
+			"type":    "markdown",
+			"content": b.Content,
+		}
+	case *blocks.ImageBlock:
+		// Smart path handling: convert relative paths to absolute for frontend consumption
+		imagePath := b.Path
+		if !filepath.IsAbs(imagePath) && !strings.HasPrefix(imagePath, "/") {
+			// Convert relative path to absolute path
+			imagePath = filepath.Join(h.config.GetDocumentFolder(docID), imagePath)
+		}
+		// If already absolute, use as-is for legacy compatibility
+		
+		return map[string]interface{}{
+			"id":       blockRef.ID,
+			"type":     "image",
+			"path":     imagePath,
+			"caption":  b.Caption,
+			"alt_text": b.AltText,
+		}
+	case *blocks.TableBlock:
+		return map[string]interface{}{
+			"id":      blockRef.ID,
+			"type":    "table",
+			"headers": b.Headers,
+			"rows":    b.Rows,
+		}
+	case *blocks.PageBreakBlock:
+		return map[string]interface{}{
+			"id":   blockRef.ID,
+			"type": "page_break",
+		}
+	default:
+		return nil
+	}
+}
 
 // handleAddHeading adds a heading block
 func (h *Handler) handleAddHeading(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
@@ -522,43 +574,10 @@ func (h *Handler) handleGetBlock(ctx context.Context, args map[string]interface{
 		return nil, fmt.Errorf("failed to load block: %w", err)
 	}
 	
-	// Convert block to response format
-	var result map[string]interface{}
-	
-	switch b := block.(type) {
-	case *blocks.HeadingBlock:
-		result = map[string]interface{}{
-			"id":    blockRef.ID,
-			"type":  "heading",
-			"level": b.Level,
-			"text":  b.Text,
-		}
-	case *blocks.MarkdownBlock:
-		result = map[string]interface{}{
-			"id":      blockRef.ID,
-			"type":    "markdown",
-			"content": b.Content,
-		}
-	case *blocks.ImageBlock:
-		result = map[string]interface{}{
-			"id":       blockRef.ID,
-			"type":     "image",
-			"path":     b.Path,
-			"caption":  b.Caption,
-			"alt_text": b.AltText,
-		}
-	case *blocks.TableBlock:
-		result = map[string]interface{}{
-			"id":      blockRef.ID,
-			"type":    "table",
-			"headers": b.Headers,
-			"rows":    b.Rows,
-		}
-	case *blocks.PageBreakBlock:
-		result = map[string]interface{}{
-			"id":   blockRef.ID,
-			"type": "page_break",
-		}
+	// Convert block to response format using shared converter
+	result := h.convertBlockToResponse(block, *blockRef, docID)
+	if result == nil {
+		return nil, fmt.Errorf("failed to convert block to response format")
 	}
 	
 	return jsonResponse(result)
@@ -636,45 +655,8 @@ func (h *Handler) handleGetBlocks(ctx context.Context, args map[string]interface
 			continue
 		}
 		
-		// Convert block to response format
-		var blockData map[string]interface{}
-		
-		switch b := block.(type) {
-		case *blocks.HeadingBlock:
-			blockData = map[string]interface{}{
-				"id":    blockRef.ID,
-				"type":  "heading",
-				"level": b.Level,
-				"text":  b.Text,
-			}
-		case *blocks.MarkdownBlock:
-			blockData = map[string]interface{}{
-				"id":      blockRef.ID,
-				"type":    "markdown",
-				"content": b.Content,
-			}
-		case *blocks.ImageBlock:
-			blockData = map[string]interface{}{
-				"id":       blockRef.ID,
-				"type":     "image",
-				"path":     b.Path,
-				"caption":  b.Caption,
-				"alt_text": b.AltText,
-			}
-		case *blocks.TableBlock:
-			blockData = map[string]interface{}{
-				"id":      blockRef.ID,
-				"type":    "table",
-				"headers": b.Headers,
-				"rows":    b.Rows,
-			}
-		case *blocks.PageBreakBlock:
-			blockData = map[string]interface{}{
-				"id":   blockRef.ID,
-				"type": "page_break",
-			}
-		}
-		
+		// Convert block to response format using shared converter
+		blockData := h.convertBlockToResponse(block, *blockRef, docID)
 		if blockData != nil {
 			results = append(results, blockData)
 		}

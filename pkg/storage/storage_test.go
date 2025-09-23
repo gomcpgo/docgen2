@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
@@ -963,5 +964,239 @@ func TestMoveChapter(t *testing.T) {
 		if doc.Chapters[i].ID != expected {
 			t.Errorf("Expected chapter at position %d to be %s, got %s", i, expected, doc.Chapters[i].ID)
 		}
+	}
+}
+
+func TestAddImageBlock(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create document
+	docID, err := storage.CreateDocument("Image Test", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Create a test image file
+	testImagePath := filepath.Join(os.TempDir(), "test-image.png")
+	testImageContent := []byte("fake png content")
+	err = os.WriteFile(testImagePath, testImageContent, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(testImagePath)
+	
+	// Copy image to assets and get relative path
+	relativePath, err := storage.CopyImageToAssets(docID, testImagePath)
+	if err != nil {
+		t.Fatalf("Failed to copy image to assets: %v", err)
+	}
+	
+	// Verify relative path format
+	if !strings.HasPrefix(relativePath, "assets/") {
+		t.Errorf("Expected relative path to start with 'assets/', got '%s'", relativePath)
+	}
+	
+	// Create image block with relative path
+	image := &blocks.ImageBlock{
+		Path:    relativePath,
+		Caption: "Test image caption",
+		AltText: "Test alt text",
+	}
+	
+	err = storage.AddBlock(docID, "", image, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add image block: %v", err)
+	}
+	
+	// Verify block was added
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(doc.Blocks) != 1 {
+		t.Errorf("Expected 1 block, got %d", len(doc.Blocks))
+	}
+	
+	if doc.Blocks[0].Type != blocks.TypeImage {
+		t.Errorf("Expected image block, got %s", doc.Blocks[0].Type)
+	}
+	
+	// Load and verify block content
+	block, err := storage.LoadBlock(docID, doc.Blocks[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	img, ok := block.(*blocks.ImageBlock)
+	if !ok {
+		t.Fatal("Expected ImageBlock type")
+	}
+	
+	// Verify path is stored as relative
+	if img.Path != relativePath {
+		t.Errorf("Expected path '%s', got '%s'", relativePath, img.Path)
+	}
+	
+	if img.Caption != "Test image caption" {
+		t.Errorf("Caption mismatch")
+	}
+	
+	if img.AltText != "Test alt text" {
+		t.Errorf("Alt text mismatch")
+	}
+	
+	// Verify the actual image file was copied
+	fullImagePath := filepath.Join(storage.config.GetDocumentFolder(docID), relativePath)
+	if _, err := os.Stat(fullImagePath); os.IsNotExist(err) {
+		t.Error("Image file was not copied to assets folder")
+	}
+}
+
+func TestImageBlockLegacyAbsolutePath(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create document
+	docID, err := storage.CreateDocument("Legacy Image Test", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	// Create image block with absolute path (legacy format)
+	absolutePath := "/some/absolute/path/to/image.png"
+	image := &blocks.ImageBlock{
+		Path:    absolutePath,
+		Caption: "Legacy image",
+		AltText: "Legacy alt text",
+	}
+	
+	// Manually add the block to simulate legacy data
+	err = storage.AddBlock(docID, "", image, document.Position{Type: document.PositionEnd})
+	if err != nil {
+		t.Fatalf("Failed to add legacy image block: %v", err)
+	}
+	
+	// Load and verify block content
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	block, err := storage.LoadBlock(docID, doc.Blocks[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	img, ok := block.(*blocks.ImageBlock)
+	if !ok {
+		t.Fatal("Expected ImageBlock type")
+	}
+	
+	// Verify absolute path is preserved for legacy compatibility
+	if img.Path != absolutePath {
+		t.Errorf("Expected legacy absolute path '%s', got '%s'", absolutePath, img.Path)
+	}
+}
+
+func TestImagePathConversion(t *testing.T) {
+	storage, cleanup := setupTestStorage(t)
+	defer cleanup()
+	
+	// Create document
+	docID, err := storage.CreateDocument("Path Conversion Test", false, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	testCases := []struct {
+		name        string
+		storedPath  string
+		description string
+	}{
+		{
+			name:        "relative_path",
+			storedPath:  "assets/test-image-001.png",
+			description: "Relative path should be stored as-is",
+		},
+		{
+			name:        "absolute_path_legacy",
+			storedPath:  "/Users/test/absolute/path/image.png",
+			description: "Absolute path should be preserved for legacy compatibility",
+		},
+	}
+	
+	var blockIDs []string
+	
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create image block with the test path
+			image := &blocks.ImageBlock{
+				Path:    tc.storedPath,
+				Caption: fmt.Sprintf("Test image for %s", tc.name),
+				AltText: fmt.Sprintf("Alt text for %s", tc.name),
+			}
+			
+			err := storage.AddBlock(docID, "", image, document.Position{Type: document.PositionEnd})
+			if err != nil {
+				t.Fatalf("Failed to add image block: %v", err)
+			}
+			
+			// Get the document to find the block ID
+			doc, err := storage.GetDocument(docID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			
+			// Find the latest block (the one we just added)
+			latestBlockRef := doc.Blocks[len(doc.Blocks)-1]
+			blockIDs = append(blockIDs, latestBlockRef.ID)
+			
+			// Load and verify the block
+			block, err := storage.LoadBlock(docID, latestBlockRef)
+			if err != nil {
+				t.Fatal(err)
+			}
+			
+			img, ok := block.(*blocks.ImageBlock)
+			if !ok {
+				t.Fatal("Expected ImageBlock type")
+			}
+			
+			// Verify the path is stored exactly as provided
+			if img.Path != tc.storedPath {
+				t.Errorf("Expected stored path '%s', got '%s'", tc.storedPath, img.Path)
+			}
+			
+			// Test that relative paths start with assets/ (indicating they're relative)
+			if strings.HasPrefix(tc.storedPath, "assets/") {
+				if !strings.HasPrefix(img.Path, "assets/") {
+					t.Errorf("Relative path should start with 'assets/', got '%s'", img.Path)
+				}
+			}
+			
+			// Test that absolute paths start with / (indicating they're absolute)
+			if strings.HasPrefix(tc.storedPath, "/") {
+				if !strings.HasPrefix(img.Path, "/") {
+					t.Errorf("Absolute path should start with '/', got '%s'", img.Path)
+				}
+			}
+		})
+	}
+	
+	// Verify we can load all blocks by ID
+	if len(blockIDs) != len(testCases) {
+		t.Errorf("Expected %d block IDs, got %d", len(testCases), len(blockIDs))
+	}
+	
+	// Test that we can retrieve all blocks and their paths are preserved
+	doc, err := storage.GetDocument(docID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if len(doc.Blocks) != len(testCases) {
+		t.Errorf("Expected %d blocks in document, got %d", len(testCases), len(doc.Blocks))
 	}
 }
