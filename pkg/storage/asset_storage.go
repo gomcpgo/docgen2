@@ -48,6 +48,6 @@ func (s *Storage) CopyImageToAssets(docID, sourcePath string) (string, error) {
 		return "", fmt.Errorf("failed to copy image: %w", err)
 	}
 	
-	// Return relative path from document root
-	return filepath.Join("assets", assetName), nil
+	// Return absolute path for use with artifact server
+	return assetPath, nil
 }
