@@ -128,12 +128,12 @@ func (mb *MarkdownBuilder) imageToMarkdown(docID string, img *blocks.ImageBlock)
 	docFolder := config.GetDocumentFolder(docID)
 	imagePath := filepath.Join(docFolder, img.Path)
 	
-	// For PDF generation with xelatex, we need to quote paths with spaces
-	// Markdown image syntax allows quotes around the path
+	// For paths with spaces, use angle brackets as per markdown spec
+	// This is the proper way to handle paths with spaces in markdown
 	if img.Caption != "" {
-		return fmt.Sprintf(`![%s]("%s")`, img.Caption, imagePath)
+		return fmt.Sprintf(`![%s](<%s>)`, img.Caption, imagePath)
 	}
-	return fmt.Sprintf(`![]("%s")`, imagePath)
+	return fmt.Sprintf(`![](<%s>)`, imagePath)
 }
 
 // tableToMarkdown converts a table block to markdown

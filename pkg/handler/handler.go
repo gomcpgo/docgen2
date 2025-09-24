@@ -31,6 +31,16 @@ func NewHandler(cfg *config.Config) *Handler {
 	}
 }
 
+// GetStorage returns the storage instance (for debugging)
+func (h *Handler) GetStorage() *storage.Storage {
+	return h.storage
+}
+
+// GetMarkdownBuilder returns a new markdown builder instance (for debugging)
+func (h *Handler) GetMarkdownBuilder() *export.MarkdownBuilder {
+	return export.NewMarkdownBuilder(h.storage)
+}
+
 // ListTools returns the list of available tools
 func (h *Handler) ListTools(ctx context.Context) (*protocol.ListToolsResponse, error) {
 	return &protocol.ListToolsResponse{

@@ -28,6 +28,7 @@ func main() {
 		markdownContent string
 		exportDoc       string
 		exportFormat    string
+		debugMarkdown   string
 		
 		// New block operations
 		updateBlock     string
@@ -59,6 +60,7 @@ func main() {
 	flag.StringVar(&markdownContent, "content", "", "Markdown content")
 	flag.StringVar(&exportDoc, "export", "", "Export document (specify doc ID)")
 	flag.StringVar(&exportFormat, "format", "html", "Export format (pdf, docx, html)")
+	flag.StringVar(&debugMarkdown, "debug-markdown", "", "Show generated markdown for document (specify doc ID)")
 	
 	// New block operation flags
 	flag.StringVar(&updateBlock, "update-block", "", "Update block in document (specify doc ID)")
@@ -139,6 +141,11 @@ func main() {
 			"document_id": exportDoc,
 			"format":      exportFormat,
 		})
+		return
+	}
+	
+	if debugMarkdown != "" {
+		runDebugMarkdown(ctx, h, debugMarkdown)
 		return
 	}
 	
@@ -298,4 +305,20 @@ func runTerminalCommand(ctx context.Context, h *docgenHandler.Handler, toolName 
 			}
 		}
 	}
+}
+
+// runDebugMarkdown outputs the generated markdown for a document
+func runDebugMarkdown(ctx context.Context, h *docgenHandler.Handler, docID string) {
+	// Get markdown builder from handler
+	markdownBuilder := h.GetMarkdownBuilder()
+	
+	// Generate markdown
+	markdown, err := markdownBuilder.BuildMarkdown(docID)
+	if err != nil {
+		log.Fatalf("Failed to generate markdown: %v", err)
+	}
+	
+	fmt.Println("=== Generated Markdown for Document:", docID, "===")
+	fmt.Println(markdown)
+	fmt.Println("=== End Markdown ===")
 }
