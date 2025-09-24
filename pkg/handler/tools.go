@@ -361,6 +361,27 @@ func getAllTools() []protocol.Tool {
 				"required": ["document_id", "block_id"]
 			}`),
 		},
+		{
+			Name:        "get_blocks",
+			Description: "Get the content of multiple blocks in a single request",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"document_id": {
+						"type": "string",
+						"description": "The document ID"
+					},
+					"block_ids": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Array of block IDs to fetch"
+					}
+				},
+				"required": ["document_id", "block_ids"]
+			}`),
+		},
 		
 		// Chapter operations
 		{

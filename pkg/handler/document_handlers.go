@@ -80,10 +80,17 @@ func (h *Handler) handleGetDocumentOverview(ctx context.Context, args map[string
 		Title:       doc.Title,
 		Author:      doc.Author,
 		HasChapters: doc.HasChapters,
+		Blocks:      []document.BlockOverview{},    // Always initialize as empty array
+		Chapters:    []document.ChapterOverview{},  // Always initialize as empty array
 	}
 	
-	if doc.HasChapters {
-		// Build chapter overview
+	// Always process document-level blocks first (if they exist)
+	if len(doc.Blocks) > 0 {
+		overview.Blocks = h.buildBlockOverviews(docID, doc.Blocks)
+	}
+	
+	// Then process chapters (if they exist)
+	if len(doc.Chapters) > 0 {
 		for _, chapterRef := range doc.Chapters {
 			chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
 			if err != nil {
@@ -97,9 +104,6 @@ func (h *Handler) handleGetDocumentOverview(ctx context.Context, args map[string
 			}
 			overview.Chapters = append(overview.Chapters, chapterOverview)
 		}
-	} else {
-		// Build flat document overview
-		overview.Blocks = h.buildBlockOverviews(docID, doc.Blocks)
 	}
 	
 	return jsonResponse(overview)
@@ -185,113 +189,12 @@ func (h *Handler) handleSearchBlocks(ctx context.Context, args map[string]interf
 	
 	chapterID, _ := getString(args, "chapter_id", false)
 	
-	doc, err := h.storage.GetDocument(docID)
+	// Use searcher to find results
+	results, err := h.searcher.SearchDocument(docID, query, chapterID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get document: %w", err)
-	}
-	
-	var results []document.SearchResult
-	queryLower := strings.ToLower(query)
-	
-	if doc.HasChapters {
-		// Search in chapters
-		for _, chapterRef := range doc.Chapters {
-			// Skip if specific chapter requested and this isn't it
-			if chapterID != "" && chapterRef.ID != chapterID {
-				continue
-			}
-			
-			chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
-			if err != nil {
-				continue
-			}
-			
-			results = append(results, h.searchInBlocks(docID, chapter.Blocks, queryLower, chapterRef.ID)...)
-		}
-	} else {
-		// Search in flat document
-		results = append(results, h.searchInBlocks(docID, doc.Blocks, queryLower, "")...)
+		return nil, fmt.Errorf("failed to search document: %w", err)
 	}
 	
 	return jsonResponse(results)
 }
 
-// searchInBlocks searches for query in blocks
-func (h *Handler) searchInBlocks(docID string, blockRefs []blocks.BlockReference, query string, chapterID string) []document.SearchResult {
-	var results []document.SearchResult
-	
-	for i, ref := range blockRefs {
-		block, err := h.storage.LoadBlock(docID, ref)
-		if err != nil {
-			continue
-		}
-		
-		content := h.getBlockContent(block)
-		if strings.Contains(strings.ToLower(content), query) {
-			// Find snippet around the match
-			snippet := h.extractSnippet(content, query)
-			
-			result := document.SearchResult{
-				BlockID:   ref.ID,
-				BlockType: string(ref.Type),
-				ChapterID: chapterID,
-				Snippet:   snippet,
-				Position:  i,
-			}
-			results = append(results, result)
-		}
-	}
-	
-	return results
-}
-
-// getBlockContent extracts searchable text from a block
-func (h *Handler) getBlockContent(block blocks.Block) string {
-	switch b := block.(type) {
-	case *blocks.HeadingBlock:
-		return b.Text
-	case *blocks.MarkdownBlock:
-		return b.Content
-	case *blocks.ImageBlock:
-		return b.Caption + " " + b.AltText
-	case *blocks.TableBlock:
-		// Combine headers and all cells
-		content := strings.Join(b.Headers, " ")
-		for _, row := range b.Rows {
-			content += " " + strings.Join(row, " ")
-		}
-		return content
-	default:
-		return ""
-	}
-}
-
-// extractSnippet extracts a snippet around the query match
-func (h *Handler) extractSnippet(content, query string) string {
-	contentLower := strings.ToLower(content)
-	index := strings.Index(contentLower, strings.ToLower(query))
-	if index < 0 {
-		return truncateString(content, 150)
-	}
-	
-	// Get 50 chars before and after the match
-	start := index - 50
-	if start < 0 {
-		start = 0
-	}
-	
-	end := index + len(query) + 50
-	if end > len(content) {
-		end = len(content)
-	}
-	
-	snippet := content[start:end]
-	if start > 0 {
-		snippet = "..." + snippet
-	}
-	if end < len(content) {
-		snippet = snippet + "..."
-	}
-	
-	return snippet
-}

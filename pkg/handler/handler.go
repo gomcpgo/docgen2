@@ -7,20 +7,27 @@ import (
 	
 	"github.com/gomcpgo/mcp/pkg/protocol"
 	"github.com/savant/mcp-servers/docgen2/pkg/config"
+	"github.com/savant/mcp-servers/docgen2/pkg/export"
+	"github.com/savant/mcp-servers/docgen2/pkg/search"
 	"github.com/savant/mcp-servers/docgen2/pkg/storage"
 )
 
 // Handler implements the MCP tool handlers for DocGen2
 type Handler struct {
-	storage *storage.Storage
-	config  *config.Config
+	storage  *storage.Storage
+	searcher *search.Searcher
+	exporter *export.Exporter
+	config   *config.Config
 }
 
 // NewHandler creates a new Handler instance
 func NewHandler(cfg *config.Config) *Handler {
+	stor := storage.NewStorage(cfg)
 	return &Handler{
-		storage: storage.NewStorage(cfg),
-		config:  cfg,
+		storage:  stor,
+		searcher: search.NewSearcher(stor),
+		exporter: export.NewExporter(cfg, stor),
+		config:   cfg,
 	}
 }
 
@@ -67,6 +74,8 @@ func (h *Handler) CallTool(ctx context.Context, req *protocol.CallToolRequest) (
 		return h.handleMoveBlock(ctx, req.Arguments)
 	case "get_block":
 		return h.handleGetBlock(ctx, req.Arguments)
+	case "get_blocks":
+		return h.handleGetBlocks(ctx, req.Arguments)
 		
 	// Chapter operations
 	case "add_chapter":
@@ -156,13 +165,15 @@ func getStringArray(args map[string]interface{}, key string, required bool) ([]s
 	
 	// Handle []interface{} from JSON
 	if arr, ok := val.([]interface{}); ok {
-		result := make([]string, len(arr))
-		for i, item := range arr {
+		result := make([]string, 0, len(arr))
+		for _, item := range arr {
 			if str, ok := item.(string); ok {
-				result[i] = str
-			} else {
-				return nil, fmt.Errorf("%s array must contain strings", key)
+				// Only include non-empty strings
+				if str != "" {
+					result = append(result, str)
+				}
 			}
+			// Skip non-string items silently for graceful handling
 		}
 		return result, nil
 	}
