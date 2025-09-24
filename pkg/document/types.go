@@ -41,8 +41,8 @@ type DocumentOverview struct {
 	Title       string             `json:"title"`
 	Author      string             `json:"author,omitempty"`
 	HasChapters bool               `json:"has_chapters"`
-	Blocks      []BlockOverview    `json:"blocks,omitempty"`
-	Chapters    []ChapterOverview  `json:"chapters,omitempty"`
+	Blocks      []BlockOverview    `json:"blocks"`
+	Chapters    []ChapterOverview  `json:"chapters"`
 }
 
 // ChapterOverview provides overview of a chapter

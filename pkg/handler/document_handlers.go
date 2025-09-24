@@ -80,6 +80,8 @@ func (h *Handler) handleGetDocumentOverview(ctx context.Context, args map[string
 		Title:       doc.Title,
 		Author:      doc.Author,
 		HasChapters: doc.HasChapters,
+		Blocks:      []document.BlockOverview{},    // Always initialize as empty array
+		Chapters:    []document.ChapterOverview{},  // Always initialize as empty array
 	}
 	
 	// Always process document-level blocks first (if they exist)

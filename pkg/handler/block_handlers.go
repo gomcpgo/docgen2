@@ -610,25 +610,23 @@ func (h *Handler) handleGetBlocks(ctx context.Context, args map[string]interface
 	// Build a map of block ID to reference for quick lookup
 	blockRefMap := make(map[string]*blocks.BlockReference)
 	
-	if doc.HasChapters {
-		// Search in chapters
-		for _, chapterRef := range doc.Chapters {
-			chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
-			if err != nil {
-				continue
-			}
-			
-			for _, ref := range chapter.Blocks {
-				blockRefMap[ref.ID] = &blocks.BlockReference{
-					ID:   ref.ID,
-					Type: ref.Type,
-					File: ref.File,
-				}
-			}
+	// Always process document-level blocks first (if they exist)
+	for _, ref := range doc.Blocks {
+		blockRefMap[ref.ID] = &blocks.BlockReference{
+			ID:   ref.ID,
+			Type: ref.Type,
+			File: ref.File,
 		}
-	} else {
-		// Search in flat document
-		for _, ref := range doc.Blocks {
+	}
+	
+	// Then process chapters (if they exist)
+	for _, chapterRef := range doc.Chapters {
+		chapter, err := h.storage.GetChapter(docID, chapterRef.ID)
+		if err != nil {
+			continue
+		}
+		
+		for _, ref := range chapter.Blocks {
 			blockRefMap[ref.ID] = &blocks.BlockReference{
 				ID:   ref.ID,
 				Type: ref.Type,
