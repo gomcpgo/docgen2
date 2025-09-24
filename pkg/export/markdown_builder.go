@@ -2,6 +2,7 @@ package export
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
@@ -28,9 +29,10 @@ func (mb *MarkdownBuilder) BuildMarkdown(docID string) (string, error) {
 	var markdown strings.Builder
 
 	// Add document title and metadata
-	markdown.WriteString(fmt.Sprintf("---\ntitle: %s\n", doc.Title))
+	// Quote the title and author to handle special characters like colons
+	markdown.WriteString(fmt.Sprintf("---\ntitle: \"%s\"\n", escapeYAMLString(doc.Title)))
 	if doc.Author != "" {
-		markdown.WriteString(fmt.Sprintf("author: %s\n", doc.Author))
+		markdown.WriteString(fmt.Sprintf("author: \"%s\"\n", escapeYAMLString(doc.Author)))
 	}
 	markdown.WriteString("---\n\n")
 
@@ -76,7 +78,7 @@ func (mb *MarkdownBuilder) processBlocks(docID string, blockRefs []blocks.BlockR
 			return "", fmt.Errorf("failed to load block %s: %w", blockRef.ID, err)
 		}
 
-		blockMarkdown, err := mb.blockToMarkdown(block)
+		blockMarkdown, err := mb.blockToMarkdown(docID, block)
 		if err != nil {
 			return "", fmt.Errorf("failed to convert block %s to markdown: %w", blockRef.ID, err)
 		}
@@ -89,7 +91,7 @@ func (mb *MarkdownBuilder) processBlocks(docID string, blockRefs []blocks.BlockR
 }
 
 // blockToMarkdown converts a single block to markdown
-func (mb *MarkdownBuilder) blockToMarkdown(block blocks.Block) (string, error) {
+func (mb *MarkdownBuilder) blockToMarkdown(docID string, block blocks.Block) (string, error) {
 	switch b := block.(type) {
 	case *blocks.HeadingBlock:
 		return mb.headingToMarkdown(b), nil
@@ -98,7 +100,7 @@ func (mb *MarkdownBuilder) blockToMarkdown(block blocks.Block) (string, error) {
 		return b.Content, nil
 
 	case *blocks.ImageBlock:
-		return mb.imageToMarkdown(b), nil
+		return mb.imageToMarkdown(docID, b), nil
 
 	case *blocks.TableBlock:
 		return mb.tableToMarkdown(b), nil
@@ -119,14 +121,19 @@ func (mb *MarkdownBuilder) headingToMarkdown(heading *blocks.HeadingBlock) strin
 }
 
 // imageToMarkdown converts an image block to markdown
-func (mb *MarkdownBuilder) imageToMarkdown(img *blocks.ImageBlock) string {
-	// Use relative path from exports folder to assets
-	imagePath := fmt.Sprintf("../%s", img.Path)
+func (mb *MarkdownBuilder) imageToMarkdown(docID string, img *blocks.ImageBlock) string {
+	// Build absolute path to the image file
+	// The image path is relative to the document folder
+	config := mb.storage.GetConfig()
+	docFolder := config.GetDocumentFolder(docID)
+	imagePath := filepath.Join(docFolder, img.Path)
 	
+	// For PDF generation with xelatex, we need to quote paths with spaces
+	// Markdown image syntax allows quotes around the path
 	if img.Caption != "" {
-		return fmt.Sprintf("![%s](%s)", img.Caption, imagePath)
+		return fmt.Sprintf(`![%s]("%s")`, img.Caption, imagePath)
 	}
-	return fmt.Sprintf("![](%s)", imagePath)
+	return fmt.Sprintf(`![]("%s")`, imagePath)
 }
 
 // tableToMarkdown converts a table block to markdown
@@ -167,6 +174,14 @@ func (mb *MarkdownBuilder) tableToMarkdown(table *blocks.TableBlock) string {
 	}
 
 	return result.String()
+}
+
+// escapeYAMLString escapes special characters in YAML strings
+func escapeYAMLString(s string) string {
+	// Escape backslashes and double quotes for YAML quoted strings
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	return s
 }
 
 // BuildChapterMarkdown builds markdown for a specific chapter

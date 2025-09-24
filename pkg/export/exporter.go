@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/savant/mcp-servers/docgen2/pkg/config"
 	"github.com/savant/mcp-servers/docgen2/pkg/storage"
@@ -55,10 +54,9 @@ func (e *Exporter) ExportDocument(docID string, format string) (string, error) {
 		return "", fmt.Errorf("failed to build markdown: %w", err)
 	}
 
-	// Generate output filename with timestamp
-	timestamp := time.Now().Format("20060102-150405")
+	// Generate output filename (without timestamp - will overwrite existing)
 	sanitizedTitle := e.sanitizeFilename(doc.Title)
-	outputFilename := fmt.Sprintf("%s-%s.%s", sanitizedTitle, timestamp, format)
+	outputFilename := fmt.Sprintf("%s.%s", sanitizedTitle, format)
 	outputPath := filepath.Join(exportsPath, outputFilename)
 
 	// Convert markdown to target format using Pandoc
@@ -105,10 +103,9 @@ func (e *Exporter) ExportChapter(docID, chapterID string, format string) (string
 		return "", fmt.Errorf("failed to build chapter markdown: %w", err)
 	}
 
-	// Generate output filename
-	timestamp := time.Now().Format("20060102-150405")
+	// Generate output filename (without timestamp - will overwrite existing)
 	sanitizedTitle := e.sanitizeFilename(chapter.Title)
-	outputFilename := fmt.Sprintf("%s-%s-%s.%s", sanitizedTitle, chapterID, timestamp, format)
+	outputFilename := fmt.Sprintf("%s-%s.%s", sanitizedTitle, chapterID, format)
 	outputPath := filepath.Join(exportsPath, outputFilename)
 
 	// Convert markdown to target format
@@ -131,13 +128,16 @@ func (e *Exporter) CheckDependencies() error {
 
 // sanitizeFilename removes characters that might cause issues in filenames
 func (e *Exporter) sanitizeFilename(name string) string {
-	// Replace spaces with underscores
-	name = strings.ReplaceAll(name, " ", "_")
+	// Replace spaces with hyphens (slugify)
+	name = strings.ReplaceAll(name, " ", "-")
+	
+	// Convert to lowercase for consistency
+	name = strings.ToLower(name)
 	
 	// Remove any characters that aren't alphanumeric, underscore, or hyphen
 	var result strings.Builder
 	for _, r := range name {
-		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || 
+		if (r >= 'a' && r <= 'z') || 
 		   (r >= '0' && r <= '9') || r == '-' || r == '_' {
 			result.WriteRune(r)
 		}
@@ -145,10 +145,13 @@ func (e *Exporter) sanitizeFilename(name string) string {
 	
 	sanitized := result.String()
 	
-	// Truncate if too long
-	if len(sanitized) > 50 {
-		sanitized = sanitized[:50]
+	// Truncate to 40 characters max
+	if len(sanitized) > 40 {
+		sanitized = sanitized[:40]
 	}
+	
+	// Trim any trailing hyphens or underscores
+	sanitized = strings.TrimRight(sanitized, "-_")
 	
 	// Default name if empty
 	if sanitized == "" {

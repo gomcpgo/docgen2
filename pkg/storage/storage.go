@@ -24,6 +24,11 @@ func NewStorage(cfg *config.Config) *Storage {
 	return &Storage{config: cfg}
 }
 
+// GetConfig returns the storage config
+func (s *Storage) GetConfig() *config.Config {
+	return s.config
+}
+
 // CreateDocument creates a new document
 func (s *Storage) CreateDocument(title string, hasChapters bool, author string) (string, error) {
 	// Generate document ID from title

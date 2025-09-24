@@ -44,8 +44,8 @@ func (p *PandocWrapper) ConvertMarkdownToFormat(markdownContent string, outputPa
 	// Add format-specific options
 	switch format {
 	case "pdf":
-		// Use default PDF engine (usually pdflatex)
-		args = append(args, "--pdf-engine=pdflatex")
+		// Use xelatex for better Unicode support (including emojis)
+		args = append(args, "--pdf-engine=xelatex")
 	case "docx":
 		// DOCX needs no special options
 	case "html":
