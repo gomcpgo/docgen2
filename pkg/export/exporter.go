@@ -11,6 +11,7 @@ import (
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
 	"github.com/savant/mcp-servers/docgen2/pkg/config"
 	"github.com/savant/mcp-servers/docgen2/pkg/storage"
+	"github.com/savant/mcp-servers/docgen2/pkg/style"
 )
 
 // Exporter handles document export operations
@@ -19,6 +20,7 @@ type Exporter struct {
 	storage         *storage.Storage
 	markdownBuilder *MarkdownBuilder
 	pandoc          *PandocWrapper
+	styleLoader     *style.StyleLoader
 }
 
 // NewExporter creates a new exporter
@@ -28,6 +30,7 @@ func NewExporter(cfg *config.Config, storage *storage.Storage) *Exporter {
 		storage:         storage,
 		markdownBuilder: NewMarkdownBuilder(storage),
 		pandoc:          NewPandocWrapper(),
+		styleLoader:     style.NewStyleLoader(cfg.RootFolder),
 	}
 }
 
@@ -62,9 +65,12 @@ func (e *Exporter) ExportDocument(docID string, format string) (string, error) {
 	outputFilename := fmt.Sprintf("%s.%s", sanitizedTitle, format)
 	outputPath := filepath.Join(exportsPath, outputFilename)
 
-	// Convert markdown to target format using Pandoc from temp directory
+	// Load style configuration for the document
+	documentStyle := e.styleLoader.LoadStyleForDocument(doc.Style)
+	
+	// Convert markdown to target format using Pandoc with styling
 	tempDir := "/tmp/docgen2-images"
-	if err := e.pandoc.ConvertMarkdownToFormatInDir(markdownContent, outputPath, format, tempDir); err != nil {
+	if err := e.pandoc.ConvertMarkdownToFormatWithStyle(markdownContent, outputPath, format, tempDir, documentStyle, doc.Title, doc.Author); err != nil {
 		return "", fmt.Errorf("failed to convert document: %w", err)
 	}
 

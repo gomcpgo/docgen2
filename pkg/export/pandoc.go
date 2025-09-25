@@ -3,8 +3,12 @@ package export
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
+	
+	"github.com/savant/mcp-servers/docgen2/pkg/style"
 )
 
 // PandocWrapper handles Pandoc command execution
@@ -129,6 +133,83 @@ func (p *PandocWrapper) ConvertMarkdownToFormatInDir(markdownContent string, out
 		// Standalone HTML with embedded CSS
 		args = append(args, "--standalone")
 		args = append(args, "--self-contained")
+	default:
+		return fmt.Errorf("unsupported format: %s", format)
+	}
+
+	// Create command with working directory
+	cmd := exec.Command("pandoc", args...)
+	cmd.Dir = workingDir
+
+	// Provide markdown content via stdin
+	cmd.Stdin = bytes.NewBufferString(markdownContent)
+
+	// Capture stderr for error messages
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	// Run with timeout
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Run()
+	}()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			if stderr.Len() > 0 {
+				return fmt.Errorf("pandoc conversion failed: %s", stderr.String())
+			}
+			return fmt.Errorf("pandoc conversion failed: %w", err)
+		}
+		return nil
+	case <-time.After(p.timeout):
+		if cmd.Process != nil {
+			cmd.Process.Kill()
+		}
+		return fmt.Errorf("pandoc conversion timed out after %v", p.timeout)
+	}
+}
+
+// ConvertMarkdownToFormatWithStyle converts markdown to specified format with custom styling
+func (p *PandocWrapper) ConvertMarkdownToFormatWithStyle(markdownContent string, outputPath string, format string, workingDir string, styleConfig style.StyleConfig, title, author string) error {
+	// Check if Pandoc is installed
+	if err := p.CheckPandocInstalled(); err != nil {
+		return err
+	}
+
+	// Build Pandoc command arguments
+	args := []string{
+		"-f", "markdown",
+		"-o", outputPath,
+	}
+
+	// Add format-specific options and templates
+	switch format {
+	case "pdf":
+		// For now, use basic PDF export without custom template
+		// TODO: Fix LaTeX template generation for Pandoc compatibility
+		args = append(args, "--pdf-engine=xelatex")
+		
+	case "html":
+		// Generate HTML template with embedded CSS
+		htmlGen := style.NewHTMLCSSGenerator()
+		htmlTemplate := htmlGen.GenerateHTMLTemplate(styleConfig, title, author)
+		
+		// Write template to temp file
+		templatePath := filepath.Join(workingDir, "template.html")
+		if err := os.WriteFile(templatePath, []byte(htmlTemplate), 0644); err != nil {
+			return fmt.Errorf("failed to write HTML template: %w", err)
+		}
+		
+		args = append(args, "--standalone")
+		args = append(args, "--self-contained")
+		args = append(args, "--template="+templatePath)
+		
+	case "docx":
+		// DOCX doesn't support custom templates easily, use default for now
+		// TODO: Consider generating a reference.docx with styles
+		
 	default:
 		return fmt.Errorf("unsupported format: %s", format)
 	}
