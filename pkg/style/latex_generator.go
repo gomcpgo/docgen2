@@ -75,16 +75,21 @@ func (g *LaTeXTemplateGenerator) GenerateTemplate(style StyleConfig, title, auth
 	
 	// Title formatting
 	template.WriteString("% Heading styles\n")
+	processedSections := make(map[string]bool)
 	for level := 1; level <= 6; level++ {
 		headingKey := fmt.Sprintf("h%d", level)
 		if size, exists := style.Fonts.HeadingSizes[headingKey]; exists {
 			sectionName := g.getSectionName(level)
-			template.WriteString(fmt.Sprintf("\\titleformat{\\%s}\n", sectionName))
-			template.WriteString("  {\\sffamily\\bfseries\\color{headingcolor}}\n")
-			template.WriteString(fmt.Sprintf("  {\\the%s}\n", sectionName))
-			template.WriteString("  {1em}\n")
-			template.WriteString(fmt.Sprintf("  {\\fontsize{%d}{%d}\\selectfont}\n", size, int(float64(size)*1.2)))
-			template.WriteString("\n")
+			// Avoid duplicate section formatting
+			if !processedSections[sectionName] {
+				template.WriteString(fmt.Sprintf("\\titleformat{\\%s}\n", sectionName))
+				template.WriteString("  {\\sffamily\\bfseries\\color{headingcolor}}\n")
+				template.WriteString(fmt.Sprintf("  {\\the%s}\n", sectionName))
+				template.WriteString("  {1em}\n")
+				template.WriteString(fmt.Sprintf("  {\\fontsize{%d}{%d}\\selectfont}\n", size, int(float64(size)*1.2)))
+				template.WriteString("\n")
+				processedSections[sectionName] = true
+			}
 		}
 	}
 	
@@ -120,8 +125,22 @@ func (g *LaTeXTemplateGenerator) GenerateTemplate(style StyleConfig, title, auth
 	
 	// Document begin
 	template.WriteString("\\begin{document}\n")
+	template.WriteString("\n")
+	template.WriteString("$if(has-frontmatter)$\n")
+	template.WriteString("\\frontmatter\n")
+	template.WriteString("$endif$\n")
+	template.WriteString("$if(title)$\n")
 	template.WriteString("\\maketitle\n")
+	template.WriteString("$endif$\n")
+	template.WriteString("$if(has-frontmatter)$\n")
+	template.WriteString("\\mainmatter\n")
+	template.WriteString("$endif$\n")
+	template.WriteString("\n")
 	template.WriteString("$body$\n")
+	template.WriteString("\n")
+	template.WriteString("$if(has-frontmatter)$\n")
+	template.WriteString("\\backmatter\n")
+	template.WriteString("$endif$\n")
 	template.WriteString("\\end{document}\n")
 	
 	return template.String()
