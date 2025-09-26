@@ -8,6 +8,7 @@ import (
 	"github.com/gomcpgo/mcp/pkg/protocol"
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
 	"github.com/savant/mcp-servers/docgen2/pkg/document"
+	"github.com/savant/mcp-servers/docgen2/pkg/style"
 )
 
 // handleCreateDocument creates a new document
@@ -196,5 +197,169 @@ func (h *Handler) handleSearchBlocks(ctx context.Context, args map[string]interf
 	}
 	
 	return jsonResponse(results)
+}
+
+// handleGetDocumentStyle returns the style configuration for a document
+func (h *Handler) handleGetDocumentStyle(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	doc, err := h.storage.GetDocument(docID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get document: %w", err)
+	}
+	
+	// Return the style config if it exists, otherwise return default
+	if doc.Style != nil {
+		return jsonResponse(doc.Style)
+	}
+	
+	// Return default style
+	defaultStyle := h.storage.GetDefaultStyle()
+	return jsonResponse(defaultStyle)
+}
+
+// handleUpdateDocumentStyle updates the style configuration for a document
+func (h *Handler) handleUpdateDocumentStyle(ctx context.Context, args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	docID, err := getString(args, "document_id", true)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Get the document
+	doc, err := h.storage.GetDocument(docID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get document: %w", err)
+	}
+	
+	// Parse the style configuration from args
+	styleData, ok := args["style"].(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("style configuration is required")
+	}
+	
+	// Update the document's style
+	newStyle, err := h.parseStyleConfig(styleData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse style configuration: %w", err)
+	}
+	
+	doc.Style = newStyle
+	
+	// Save the updated document
+	if err := h.storage.SaveDocument(docID, doc); err != nil {
+		return nil, fmt.Errorf("failed to save document: %w", err)
+	}
+	
+	return successResponse("Document style updated successfully"), nil
+}
+
+// parseStyleConfig parses style configuration from map to StyleConfig struct
+func (h *Handler) parseStyleConfig(data map[string]interface{}) (*style.StyleConfig, error) {
+	config := &style.StyleConfig{}
+	
+	// Parse fonts
+	if fonts, ok := data["fonts"].(map[string]interface{}); ok {
+		config.Fonts.BodyFamily = getStringFromMap(fonts, "body_family", "Times New Roman")
+		config.Fonts.HeadingFamily = getStringFromMap(fonts, "heading_family", "Arial")
+		config.Fonts.MonospaceFamily = getStringFromMap(fonts, "monospace_family", "Courier New")
+		config.Fonts.BodySize = getIntFromMap(fonts, "body_size", 11)
+		
+		// Parse heading sizes
+		if headingSizes, ok := fonts["heading_sizes"].(map[string]interface{}); ok {
+			config.Fonts.HeadingSizes = make(map[string]int)
+			for k, v := range headingSizes {
+				if size, ok := v.(float64); ok {
+					config.Fonts.HeadingSizes[k] = int(size)
+				}
+			}
+		} else {
+			// Use defaults
+			config.Fonts.HeadingSizes = map[string]int{
+				"h1": 20, "h2": 16, "h3": 14, "h4": 12, "h5": 11, "h6": 10,
+			}
+		}
+	}
+	
+	// Parse colors
+	if colors, ok := data["colors"].(map[string]interface{}); ok {
+		config.Colors.BodyText = getStringFromMap(colors, "body_text", "0,0,0")
+		config.Colors.HeadingText = getStringFromMap(colors, "heading_text", "0,0,0")
+	}
+	
+	// Parse page config
+	if page, ok := data["page"].(map[string]interface{}); ok {
+		config.Page.Size = getStringFromMap(page, "size", "a4")
+		config.Page.Orientation = getStringFromMap(page, "orientation", "portrait")
+		
+		// Parse margins
+		if margins, ok := page["margins"].(map[string]interface{}); ok {
+			config.Page.Margins.Top = getIntFromMap(margins, "top", 72)
+			config.Page.Margins.Bottom = getIntFromMap(margins, "bottom", 72)
+			config.Page.Margins.Left = getIntFromMap(margins, "left", 72)
+			config.Page.Margins.Right = getIntFromMap(margins, "right", 72)
+		}
+	}
+	
+	// Parse spacing
+	if spacing, ok := data["spacing"].(map[string]interface{}); ok {
+		config.Spacing.LineSpacing = getFloatFromMap(spacing, "line_spacing", 1.2)
+		config.Spacing.ParagraphSpacing = getIntFromMap(spacing, "paragraph_spacing", 6)
+	}
+	
+	// Parse header
+	if header, ok := data["header"].(map[string]interface{}); ok {
+		config.Header.Enabled = getBoolFromMap(header, "enabled", true)
+		config.Header.Content = getStringFromMap(header, "content", "{title}")
+		config.Header.Align = getStringFromMap(header, "align", "center")
+		config.Header.FontSize = getIntFromMap(header, "font_size", 10)
+	}
+	
+	// Parse footer
+	if footer, ok := data["footer"].(map[string]interface{}); ok {
+		config.Footer.Enabled = getBoolFromMap(footer, "enabled", true)
+		config.Footer.Content = getStringFromMap(footer, "content", "Page {page}")
+		config.Footer.Align = getStringFromMap(footer, "align", "center")
+		config.Footer.FontSize = getIntFromMap(footer, "font_size", 10)
+	}
+	
+	return config, nil
+}
+
+// Helper functions for parsing map values
+func getStringFromMap(m map[string]interface{}, key, defaultValue string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return defaultValue
+}
+
+func getIntFromMap(m map[string]interface{}, key string, defaultValue int) int {
+	if v, ok := m[key].(float64); ok {
+		return int(v)
+	}
+	if v, ok := m[key].(int); ok {
+		return v
+	}
+	return defaultValue
+}
+
+func getFloatFromMap(m map[string]interface{}, key string, defaultValue float64) float64 {
+	if v, ok := m[key].(float64); ok {
+		return v
+	}
+	if v, ok := m[key].(int); ok {
+		return float64(v)
+	}
+	return defaultValue
+}
+
+func getBoolFromMap(m map[string]interface{}, key string, defaultValue bool) bool {
+	if v, ok := m[key].(bool); ok {
+		return v
+	}
+	return defaultValue
 }
 

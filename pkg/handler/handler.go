@@ -62,6 +62,10 @@ func (h *Handler) CallTool(ctx context.Context, req *protocol.CallToolRequest) (
 		return h.handleDeleteDocument(ctx, req.Arguments)
 	case "search_blocks":
 		return h.handleSearchBlocks(ctx, req.Arguments)
+	case "get_document_style":
+		return h.handleGetDocumentStyle(ctx, req.Arguments)
+	case "update_document_style":
+		return h.handleUpdateDocumentStyle(ctx, req.Arguments)
 		
 	// Block operations
 	case "add_heading":
