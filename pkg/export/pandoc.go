@@ -394,42 +394,8 @@ func (p *PandocWrapper) escapeLatex(text string) string {
 		// This text contains LaTeX commands, only escape emojis and special chars but preserve LaTeX
 		result := text
 		
-		// Handle emojis first
-		emojiReplacements := map[string]string{
-			"📖": "Book",
-			"📚": "Books", 
-			"✨": "*",
-			"🎯": "[target]",
-			"💡": "[idea]",
-			"❤️": "love",
-			"⭐": "*",
-			"🚀": "[rocket]",
-			"📝": "[note]",
-			"✅": "[done]",
-			"❌": "[x]",
-			"⚠️": "Warning:",
-			"📌": "[pin]",
-			"🔍": "[search]",
-			"💻": "[computer]",
-			"📊": "[chart]",
-			"📈": "[graph]",
-			"🎨": "[art]",
-			"🔧": "[tools]",
-			"📧": "[email]",
-			"📅": "[calendar]",
-			"⏰": "[clock]",
-			"🌟": "*",
-			"👍": "+1",
-			"👎": "-1", 
-			"➡️": "->",
-			"⬅️": "<-",
-			"⬆️": "^",
-			"⬇️": "v",
-		}
-		
-		for emoji, replacement := range emojiReplacements {
-			result = strings.ReplaceAll(result, emoji, replacement)
-		}
+		// Remove characters that are problematic for LaTeX (emojis and symbols)
+		result = p.removeProblematicUnicodeChars(result)
 		
 		return result
 	}
@@ -457,42 +423,70 @@ func (p *PandocWrapper) escapeLatex(text string) string {
 		result = strings.ReplaceAll(result, r.from, r.to)
 	}
 	
-	// Handle common emojis - replace with text equivalents
-	emojiReplacements := map[string]string{
-		"📖": "Book",
-		"📚": "Books",
-		"✨": "*",
-		"🎯": "[target]",
-		"💡": "[idea]",
-		"❤️": "love",
-		"⭐": "*",
-		"🚀": "[rocket]",
-		"📝": "[note]",
-		"✅": "[done]",
-		"❌": "[x]",
-		"⚠️": "Warning:",
-		"📌": "[pin]",
-		"🔍": "[search]",
-		"💻": "[computer]",
-		"📊": "[chart]",
-		"📈": "[graph]",
-		"🎨": "[art]",
-		"🔧": "[tools]",
-		"📧": "[email]",
-		"📅": "[calendar]",
-		"⏰": "[clock]",
-		"🌟": "*",
-		"👍": "+1",
-		"👎": "-1",
-		"➡️": "->",
-		"⬅️": "<-",
-		"⬆️": "^",
-		"⬇️": "v",
-	}
-	
-	for emoji, replacement := range emojiReplacements {
-		result = strings.ReplaceAll(result, emoji, replacement)
-	}
+	// Remove characters that are problematic for LaTeX (emojis and symbols)
+	result = p.removeProblematicUnicodeChars(result)
 	
 	return result
+}
+
+// removeProblematicUnicodeChars removes Unicode characters that are problematic for LaTeX
+// This includes:
+// - Emoji and pictographs (U+1F300-U+1F9FF): 🌀-🧿 including all emojis
+// - Miscellaneous symbols and pictographs (U+2600-U+26FF): ☀-⛿ (weather, astrology, etc.)
+// - Dingbats (U+2700-U+27BF): ✀-➿ (ornamental symbols)
+// - Transport and map symbols (U+1F680-U+1F6FF): 🚀-🛿 (vehicles, maps)
+// - Supplemental symbols (U+1F900-U+1F9FF): 🤀-🧿 (faces, gestures, etc.)
+//
+// Characters in standard Latin, Cyrillic, Greek, Arabic, CJK, and other language ranges are preserved.
+func (p *PandocWrapper) removeProblematicUnicodeChars(text string) string {
+	var result strings.Builder
+	
+	for _, r := range text {
+		// Remove problematic Unicode ranges for LaTeX
+		if p.isProblematicForLaTeX(r) {
+			continue // Skip this character
+		}
+		result.WriteRune(r)
+	}
+	
+	return result.String()
+}
+
+// isProblematicForLaTeX identifies characters that are problematic for LaTeX
+func (p *PandocWrapper) isProblematicForLaTeX(r rune) bool {
+	// Emoji and Symbol ranges that are typically not supported by standard LaTeX fonts
+	switch {
+	// Emoji ranges
+	case r >= 0x1F600 && r <= 0x1F64F: // Emoticons: 😀-🙏
+		return true
+	case r >= 0x1F300 && r <= 0x1F5FF: // Miscellaneous Symbols and Pictographs: 🌀-🗿
+		return true
+	case r >= 0x1F680 && r <= 0x1F6FF: // Transport and Map Symbols: 🚀-🛿
+		return true  
+	case r >= 0x1F700 && r <= 0x1F77F: // Alchemical Symbols: 🜀-🝿
+		return true
+	case r >= 0x1F780 && r <= 0x1F7FF: // Geometric Shapes Extended: 🞀-🟿
+		return true
+	case r >= 0x1F800 && r <= 0x1F8FF: // Supplemental Arrows-C: 🠀-🣿
+		return true
+	case r >= 0x1F900 && r <= 0x1F9FF: // Supplemental Symbols and Pictographs: 🤀-🧿
+		return true
+	case r >= 0x1FA00 && r <= 0x1FA6F: // Chess Symbols: 🨀-🩯
+		return true
+	case r >= 0x1FA70 && r <= 0x1FAFF: // Symbols and Pictographs Extended-A: 🩰-🫿
+		return true
+	case r >= 0x2600 && r <= 0x26FF: // Miscellaneous Symbols: ☀-⛿
+		return true
+	case r >= 0x2700 && r <= 0x27BF: // Dingbats: ✀-➿
+		return true
+	case r >= 0x1F1E6 && r <= 0x1F1FF: // Regional Indicator Symbols (flags): 🇦-🇿
+		return true
+	
+	// Some additional problematic symbols
+	case r >= 0x2190 && r <= 0x21FF: // Arrows: ←-⇿ (many fonts don't have all arrows)
+		// Only remove decorative arrows, keep basic ones
+		return r >= 0x21D0 // Keep basic arrows ←→↑↓, remove decorative ones
+	}
+	
+	return false
 }

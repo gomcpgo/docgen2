@@ -272,9 +272,9 @@ func TestLaTeXHeaderGeneration(t *testing.T) {
 		t.Error("LaTeX header missing pageref command")
 	}
 
-	// Check that emoji was converted
-	if !strings.Contains(header, "Book Test Title by Test Author") {
-		t.Error("LaTeX header missing converted emoji content")
+	// Check that emoji was removed (not converted to text)
+	if !strings.Contains(header, " Test Title by Test Author") {
+		t.Error("LaTeX header missing content with emoji removed")
 	}
 
 	t.Logf("✅ LaTeX header generation working correctly")
@@ -329,25 +329,48 @@ func TestProcessTemplateVariables(t *testing.T) {
 	}
 }
 
-// TestEmojiHandling tests the emoji escape functionality
-func TestEmojiHandling(t *testing.T) {
+// TestUnicodeHandling tests the generic Unicode handling functionality
+func TestUnicodeHandling(t *testing.T) {
 	wrapper := NewPandocWrapper()
 
 	testCases := []struct {
-		input    string
-		expected string
+		input       string
+		expected    string
+		description string
 	}{
-		{"📖 Book Title", "Book Book Title"},
-		{"✨ Sparkle", "* Sparkle"},
-		{"🚀 Launch", "[rocket] Launch"},
-		{"Page \\thepage with 📖", "Page \\thepage with Book"}, // LaTeX preserved
+		// Emoji removal tests
+		{"📖 Book Title", " Book Title", "Remove book emoji"},
+		{"✨ Sparkle", " Sparkle", "Remove sparkle emoji"},
+		{"🚀 Launch", " Launch", "Remove rocket emoji"},
+		{"Hello 🌟 World 🎉", "Hello  World ", "Remove multiple emojis"},
+		
+		// Language preservation tests  
+		{"中文测试 Chinese", "中文测试 Chinese", "Preserve Chinese characters"},
+		{"اللغة العربية Arabic", "اللغة العربية Arabic", "Preserve Arabic characters"},
+		{"Русский текст", "Русский текст", "Preserve Russian characters"},
+		{"Français Español", "Français Español", "Preserve accented characters"},
+		
+		// Mixed content tests
+		{"Hello 🌍 中文 🚀", "Hello  中文 ", "Remove emojis, keep Chinese"},
+		{"Math ∑∫ 📊 Chart", "Math ∑∫  Chart", "Keep math symbols, remove emoji"},
+		
+		// LaTeX preservation
+		{"Page \\thepage with 📖", "Page \\thepage with ", "LaTeX preserved, emoji removed"},
+		
+		// Basic symbols (should be preserved)
+		{"Basic arrows: ← → ↑ ↓", "Basic arrows: ← → ↑ ↓", "Keep basic arrows"},
+		
+		// No problematic characters
+		{"Regular English text", "Regular English text", "Unchanged regular text"},
+		{"", "", "Empty string"},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.input, func(t *testing.T) {
+		t.Run(tc.description, func(t *testing.T) {
 			result := wrapper.escapeLatex(tc.input)
 			if result != tc.expected {
-				t.Errorf("Expected '%s', got '%s'", tc.expected, result)
+				t.Errorf("Test: %s\nInput: '%s'\nExpected: '%s'\nGot: '%s'", 
+					tc.description, tc.input, tc.expected, result)
 			}
 		})
 	}
