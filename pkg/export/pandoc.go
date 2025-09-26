@@ -200,8 +200,28 @@ func (p *PandocWrapper) ConvertMarkdownToFormatWithStyle(markdownContent string,
 		args = append(args, "-V", fmt.Sprintf("monofont=%s", styleConfig.Fonts.MonospaceFamily))
 		args = append(args, "-V", fmt.Sprintf("fontsize=%dpt", styleConfig.Fonts.BodySize))
 		
-		// Geometry for margins
-		marginGeometry := fmt.Sprintf("margin=%dpt", styleConfig.Page.Margins.Top)
+		// Geometry for margins and orientation
+		geometryParts := []string{
+			fmt.Sprintf("top=%dpt", styleConfig.Page.Margins.Top),
+			fmt.Sprintf("bottom=%dpt", styleConfig.Page.Margins.Bottom),
+			fmt.Sprintf("left=%dpt", styleConfig.Page.Margins.Left),
+			fmt.Sprintf("right=%dpt", styleConfig.Page.Margins.Right),
+		}
+		
+		// Add page size and orientation
+		if strings.ToLower(styleConfig.Page.Size) == "a4" {
+			geometryParts = append(geometryParts, "a4paper")
+		} else if strings.ToLower(styleConfig.Page.Size) == "letter" {
+			geometryParts = append(geometryParts, "letterpaper")
+		} else if strings.ToLower(styleConfig.Page.Size) == "legal" {
+			geometryParts = append(geometryParts, "legalpaper")
+		}
+		
+		if strings.ToLower(styleConfig.Page.Orientation) == "landscape" {
+			geometryParts = append(geometryParts, "landscape")
+		}
+		
+		marginGeometry := strings.Join(geometryParts, ",")
 		args = append(args, "-V", fmt.Sprintf("geometry=%s", marginGeometry))
 		
 		// Generate minimal LaTeX header for advanced styling (colors, headers/footers)

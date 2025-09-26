@@ -134,16 +134,13 @@ func (sl *StyleLoader) mergeStyles(base, override StyleConfig) StyleConfig {
 	if override.Page.Orientation != "" {
 		result.Page.Orientation = override.Page.Orientation
 	}
-	if override.Page.Margins.Top != 0 {
+	// Always apply margin values (including zero) if the style config is being overridden
+	// Only skip if the entire margins struct is uninitialized (all zeros in base case)
+	if override.Page.Margins.Top != 0 || override.Page.Margins.Bottom != 0 || 
+	   override.Page.Margins.Left != 0 || override.Page.Margins.Right != 0 {
 		result.Page.Margins.Top = override.Page.Margins.Top
-	}
-	if override.Page.Margins.Bottom != 0 {
 		result.Page.Margins.Bottom = override.Page.Margins.Bottom
-	}
-	if override.Page.Margins.Left != 0 {
 		result.Page.Margins.Left = override.Page.Margins.Left
-	}
-	if override.Page.Margins.Right != 0 {
 		result.Page.Margins.Right = override.Page.Margins.Right
 	}
 	
