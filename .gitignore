@@ -1,2 +1,4 @@
 bin
 docgen_data
+.DS_Store
+docs

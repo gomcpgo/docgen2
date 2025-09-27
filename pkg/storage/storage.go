@@ -11,6 +11,7 @@ import (
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
 	"github.com/savant/mcp-servers/docgen2/pkg/config"
 	"github.com/savant/mcp-servers/docgen2/pkg/document"
+	"github.com/savant/mcp-servers/docgen2/pkg/style"
 	"gopkg.in/yaml.v3"
 )
 
@@ -22,6 +23,11 @@ type Storage struct {
 // NewStorage creates a new storage instance
 func NewStorage(cfg *config.Config) *Storage {
 	return &Storage{config: cfg}
+}
+
+// GetConfig returns the storage config
+func (s *Storage) GetConfig() *config.Config {
+	return s.config
 }
 
 // CreateDocument creates a new document
@@ -175,4 +181,10 @@ func (s *Storage) DeleteDocument(docID string) error {
 	}
 	
 	return nil
+}
+
+// GetDefaultStyle returns the default style configuration
+func (s *Storage) GetDefaultStyle() *style.StyleConfig {
+	defaultStyle := style.GetDefaultStyle()
+	return &defaultStyle
 }

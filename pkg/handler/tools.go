@@ -89,6 +89,64 @@ func getAllTools() []protocol.Tool {
 				"required": ["document_id", "query"]
 			}`),
 		},
+		{
+			Name:        "get_document_style",
+			Description: "Get the style configuration for a document",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"document_id": {
+						"type": "string",
+						"description": "The document ID"
+					}
+				},
+				"required": ["document_id"]
+			}`),
+		},
+		{
+			Name:        "update_document_style",
+			Description: "Update the style configuration for a document",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"document_id": {
+						"type": "string",
+						"description": "The document ID"
+					},
+					"style": {
+						"type": "object",
+						"description": "The style configuration object",
+						"properties": {
+							"fonts": {
+								"type": "object",
+								"description": "Font configuration"
+							},
+							"colors": {
+								"type": "object",
+								"description": "Color configuration"
+							},
+							"page": {
+								"type": "object",
+								"description": "Page layout configuration"
+							},
+							"spacing": {
+								"type": "object",
+								"description": "Spacing configuration"
+							},
+							"header": {
+								"type": "object",
+								"description": "Header configuration"
+							},
+							"footer": {
+								"type": "object",
+								"description": "Footer configuration"
+							}
+						}
+					}
+				},
+				"required": ["document_id", "style"]
+			}`),
+		},
 		
 		// Block operations
 		{

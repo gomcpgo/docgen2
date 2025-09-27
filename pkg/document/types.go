@@ -4,6 +4,7 @@ import (
 	"time"
 	
 	"github.com/savant/mcp-servers/docgen2/pkg/blocks"
+	"github.com/savant/mcp-servers/docgen2/pkg/style"
 )
 
 // Document represents a document with its metadata
@@ -13,6 +14,9 @@ type Document struct {
 	CreatedAt   time.Time `yaml:"created_at"`
 	UpdatedAt   time.Time `yaml:"updated_at"`
 	HasChapters bool      `yaml:"has_chapters"`
+	
+	// Styling configuration
+	Style *style.StyleConfig `yaml:"style,omitempty"`
 	
 	// For flat documents
 	Blocks []blocks.BlockReference `yaml:"blocks,omitempty"`
